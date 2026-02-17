@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>星際建築師 - 倒塌即結束/全面圓角/天空物件</title>
+  <title>星際建築師</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
   <style>
     body{
@@ -60,7 +60,7 @@
     }
     #timer-fill{ width:100%; height:100%; background:#ff416c; }
 
-    #game-viewport{ width:100vw; height:100vh; transition: transform 0.35s ease-out; }
+    #game-viewport{ width:100vw; height:100vh; }
     canvas{ display:block; }
 
     #overlay{
@@ -86,6 +86,8 @@
       background: rgba(0,0,0,0.30);
       box-shadow: 0 16px 50px rgba(0,0,0,0.35);
       color:white;
+      max-height: 86vh;
+      overflow: hidden;
     }
     #overlay h1{
       margin: 2px 0 8px 0;
@@ -126,6 +128,54 @@
       color: #0b1a14;
     }
     button:active{ transform: scale(0.98); }
+
+    /* ---- Leaderboard ---- */
+    .leaderboard{
+      margin-top: 12px;
+      border-radius: 14px;
+      padding: 12px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: rgba(0,0,0,0.18);
+    }
+    .lb-title{
+      font-weight: 900;
+      letter-spacing: 0.6px;
+      margin-bottom: 2px;
+    }
+    .lb-sub{
+      font-size: 12px;
+      opacity: 0.75;
+      margin-bottom: 8px;
+    }
+    .lb-scroll{
+      max-height: 240px;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding-right: 6px;
+    }
+    .lb-row{
+      display:grid;
+      grid-template-columns: 36px 72px 90px 80px 1fr;
+      gap: 8px;
+      align-items:center;
+      padding: 8px 6px;
+      border-bottom: 1px solid rgba(255,255,255,0.10);
+      font-size: 13px;
+    }
+    .lb-head{
+      position: sticky;
+      top: 0;
+      background: rgba(0,0,0,0.35);
+      backdrop-filter: blur(6px);
+      border-radius: 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.14);
+      font-weight: 900;
+      z-index: 2;
+    }
+    .lb-me{
+      background: rgba(78,204,163,0.20);
+      border-radius: 10px;
+    }
   </style>
 </head>
 
@@ -170,6 +220,17 @@
         </div>
       </div>
 
+      <div class="leaderboard" id="lb-wrap" style="display:none;">
+        <div class="lb-title">排行榜（本機）</div>
+        <div class="lb-sub">排序：LEVEL ＞ 分數 ＞ COMBO</div>
+        <div class="lb-scroll" id="lb-scroll" role="region" aria-label="leaderboard">
+          <div class="lb-row lb-head">
+            <div>#</div><div>LEVEL</div><div>Score</div><div>Combo</div><div>Time</div>
+          </div>
+          <div id="lb-list"></div>
+        </div>
+      </div>
+
       <div class="actions" id="ov-actions" style="display:none;">
         <button id="btn-retry" type="button">再玩一次</button>
       </div>
@@ -189,16 +250,29 @@ engine.velocityIterations = 8;
 engine.constraintIterations = 4;
 world.gravity.y = 1;
 
-const viewW = window.innerWidth;
-const viewH = window.innerHeight;
-const viewport = document.getElementById('game-viewport');
-const WORLD_HEIGHT = viewH * 15;
+// View / Render
+let viewW = window.innerWidth;
+let viewH = window.innerHeight;
 
+// 世界高度（物理用）可以很高；canvas 不要很高
+let WORLD_HEIGHT = viewH * 60;
+
+// 房子高度至少一倍
+const BLOCK_H = 80;
+
+const viewport = document.getElementById('game-viewport');
 const render = Render.create({
   element: viewport,
   engine,
-  options: { width: viewW, height: WORLD_HEIGHT, wireframes: false, background: 'transparent' }
+  options: {
+    width: viewW,
+    height: viewH,
+    wireframes: false,
+    background: 'transparent',
+    hasBounds: true
+  }
 });
+Render.setPixelRatio(render, window.devicePixelRatio || 1);
 
 // UI refs
 const overlay = document.getElementById('overlay');
@@ -214,28 +288,32 @@ const btnRetry = document.getElementById('btn-retry');
 const ROUND_TIME = 8;
 
 const MATERIAL = { restitution:0.02, friction:0.92, frictionStatic:0.98, frictionAir:0.02, density:0.0022 };
-
 const LANDING_STABILIZE = { frictionAirBoost:0.14, durationMs:70, velXScale:0.06, velYScale:0.45, angScale:0.22 };
 
-const STABILITY = { windowMs:160, maxAngleRad:0.55, maxOmega:1.6, maxYDrop:48, maxXDrift:40 };
+// 放寬穩定判定
+const STABILITY = {
+  windowMs: 220,
+  maxAngleRad: 0.72,
+  maxOmega: 2.2,
+  maxYDrop: 95,
+  maxXDrift: 60
+};
 
-// ✅ 倒塌偵測器：解決「明明在倒塌但遊戲不結束」
+// 倒塌偵測：放寬 + 延長
 const COLLAPSE = {
-  // 只要塔「連續」出現失穩趨勢超過 holdMs 就直接 Game Over
-  holdMs: 180,
-  // 失穩判定（偏敏感但不會誤判太多）
-  angleRad: 0.85,         // ~48.7°
-  omega: 2.4,
-  speed: 6.2,
-  xPadding: 260,
-  outOfViewPadding: 220
+  holdMs: 320,
+  angleRad: 1.05,
+  omega: 3.0,
+  speed: 8.0,
+  xPadding: 280,
+  outOfViewPadding: 260
 };
 
 const FAIL = { outOfViewPadding:220, outOfWorldPadding:600, xPadding:240 };
-const GAMEOVER = { removeGroundMs:350, showSummaryMs:1150 }; // ✅ 更快進結算（避免拖太久）
+const GAMEOVER = { removeGroundMs:350, showSummaryMs:1150 };
 
 // Ground
-const groundY = WORLD_HEIGHT - 100;
+let groundY = WORLD_HEIGHT - 100;
 const groundH = 120;
 let ground = Bodies.rectangle(viewW/2, groundY, viewW, groundH, {
   isStatic: true,
@@ -246,9 +324,16 @@ let ground = Bodies.rectangle(viewW/2, groundY, viewW, groundH, {
 });
 World.add(world, ground);
 
-// Camera
-let currentScrollY = viewH * 14;
-viewport.style.transform = `translateY(-${currentScrollY}px)`;
+// Camera bounds
+let currentScrollY = Math.max(0, groundY - viewH + 160);
+function applyCamera(){
+  const y = Math.max(0, Math.min(WORLD_HEIGHT - viewH, currentScrollY));
+  render.bounds.min.x = 0;
+  render.bounds.max.x = viewW;
+  render.bounds.min.y = y;
+  render.bounds.max.y = y + viewH;
+}
+applyCamera();
 
 // Game state
 let state = "running";
@@ -271,7 +356,7 @@ let lastTimestamp = null;
 const particles = [];
 const popups = [];
 
-let pendingCommit = null; // { body, base, startTs, startX, startY, diff, w }
+let pendingCommit = null;
 let spawnQueued = false;
 
 // collapse detector state
@@ -289,7 +374,6 @@ function updateTimerUI(){
   document.getElementById('timer-fill').style.width = (t / ROUND_TIME * 100) + "%";
 }
 function setBackgroundForLevel(lvl){
-  // ✅ 保留你喜歡的漸層變化，改成階段漸層（更漂亮）
   let bg = "linear-gradient(#87CEEB, #cfefff)";
   if(lvl >= 5)  bg = "linear-gradient(#5fb8ff, #bfe8ff)";
   if(lvl >= 10) bg = "linear-gradient(#1e3c72, #6bb6ff)";
@@ -304,6 +388,8 @@ function showOverlayCollapsing(reasonText){
   ovSub.textContent = reasonText + "（崩塌中…）";
   ovSummary.style.display = "none";
   ovActions.style.display = "none";
+  const lb = document.getElementById('lb-wrap');
+  if(lb) lb.style.display = "none";
 }
 function showOverlaySummary(){
   overlay.classList.add('show');
@@ -314,6 +400,10 @@ function showOverlaySummary(){
   ovScore.textContent = String(score);
   ovSummary.style.display = "grid";
   ovActions.style.display = "flex";
+
+  const myId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  const arr = addToLB({ id: myId, level, score, combo, ts: Date.now() });
+  renderLB(arr, myId);
 }
 
 // VFX helpers
@@ -348,12 +438,12 @@ function spawnBlock(){
 
   const w = level>=20 ? 60 : (level>=10 ? 90 : 120);
   const highestY = stackedBlocks.length>0 ? stackedBlocks[stackedBlocks.length-1].position.y : groundY-60;
-  const spawnY = highestY - 200;
+  const spawnY = highestY - 240;
 
   const hue = (level * 28 + Math.random()*12) % 360;
   const baseColor = `hsl(${hue}, 72%, 62%)`;
 
-  currentCraneBlock = Bodies.rectangle(viewW/2, spawnY, w, 40, {
+  currentCraneBlock = Bodies.rectangle(viewW/2, spawnY, w, BLOCK_H, {
     isStatic:true,
     isSensor:true,
     restitution:MATERIAL.restitution,
@@ -380,7 +470,6 @@ function drop(){
   if(fallingBlock || pendingCommit) return;
 
   inputLock = true;
-
   const b=currentCraneBlock;
   Body.setStatic(b,false);
   b.isSensor=false;
@@ -498,6 +587,11 @@ function commitSuccess(){
     combo = 0;
   }
 
+  // 落地後保護期：倒塌偵測跳過
+  const now = engine.timing.timestamp;
+  body.plugin = body.plugin || {};
+  body.plugin.stableUntil = now + 420;
+
   stackedBlocks.push(body);
 
   timeLeft = ROUND_TIME;
@@ -505,9 +599,10 @@ function commitSuccess(){
   setBackgroundForLevel(level);
   updateUI();
 
-  if(level>3){
-    currentScrollY=(viewH*14)-(level-3)*40;
-    viewport.style.transform=`translateY(-${currentScrollY}px)`;
+  if(level > 3){
+    const baseCam = groundY - viewH + 160;
+    const risePerLevel = BLOCK_H * 0.62;
+    currentScrollY = Math.max(0, baseCam - (level - 3) * risePerLevel);
   }
 
   pendingCommit = null;
@@ -545,23 +640,27 @@ Events.on(engine,'collisionStart',(event)=>{
   }
 });
 
-// ✅ 倒塌偵測：解決「已倒塌但遲遲不結束」
-// 只要塔有明顯崩塌趨勢一段時間，直接 startGameOver（running 狀態才生效）
+// 倒塌偵測：跳過保護期
 function updateCollapseDetector(dt){
   if(state!=="running") return;
-  if(level < 2) { collapseBadMs = 0; return; } // 太低不偵測，避免誤判
+  if(level < 2) { collapseBadMs = 0; return; }
 
   let bad = false;
+  const now = engine.timing.timestamp;
 
-  // 1) 任一堆疊方塊掉出視野/左右飄太遠
   for(const b of stackedBlocks){
+    const stableUntil = b.plugin?.stableUntil || 0;
+    if(now < stableUntil) continue;
+
     if(b.position.y > currentScrollY + viewH + COLLAPSE.outOfViewPadding) { bad = true; break; }
     if(b.position.x < -COLLAPSE.xPadding || b.position.x > viewW + COLLAPSE.xPadding) { bad = true; break; }
   }
 
-  // 2) 任一堆疊方塊角度/角速度/速度過大（表示已失穩）
   if(!bad){
     for(const b of stackedBlocks){
+      const stableUntil = b.plugin?.stableUntil || 0;
+      if(now < stableUntil) continue;
+
       const absAngle = Math.abs(b.angle);
       const absOmega = Math.abs(b.angularVelocity);
       const sp = Math.hypot(b.velocity.x, b.velocity.y);
@@ -571,7 +670,6 @@ function updateCollapseDetector(dt){
     }
   }
 
-  // 3) 若正在 pendingCommit 或 fallingBlock，本來就可能動，避免誤判：稍微放寬
   if(pendingCommit || fallingBlock){
     if(bad) collapseBadMs += dt*1000 * 0.55;
     else collapseBadMs = Math.max(0, collapseBadMs - dt*1000 * 0.7);
@@ -604,7 +702,6 @@ function startGameOver(reason){
 
   showOverlayCollapsing(reason);
 
-  // 你喜歡的倒塌畫面保留
   const n=stackedBlocks.length;
   for(let i=0;i<n;i++){
     const b=stackedBlocks[i];
@@ -623,7 +720,6 @@ function startGameOver(reason){
     }
   }, GAMEOVER.removeGroundMs);
 
-  // ✅ 更快進結算（你反映拖太久）
   setTimeout(()=>{
     state="ended";
     showOverlaySummary();
@@ -637,6 +733,7 @@ Events.on(engine,'beforeUpdate',()=>{
   const dt=(ts-lastTimestamp)/1000;
   lastTimestamp=ts;
 
+  applyCamera();
   updateVfx(dt);
 
   if(state!=="running") return;
@@ -670,7 +767,7 @@ Events.on(engine,'beforeUpdate',()=>{
   }
 
   updatePendingCommit(ts);
-  updateCollapseDetector(dt); // ✅ 新增：倒塌偵測器
+  updateCollapseDetector(dt);
 });
 
 function updateVfx(dt){
@@ -690,9 +787,8 @@ function updateVfx(dt){
   }
 }
 
-// ---------- Rounded quad helper (for top/side faces) ----------
+// ---------- Drawing helpers ----------
 function drawRoundedQuad(ctx, pts, r){
-  // pts: [{x,y}*4] in order
   const n = pts.length;
   const clampR = (pPrev, p, pNext, rr)=>{
     const d1 = Math.hypot(p.x - pPrev.x, p.y - pPrev.y);
@@ -704,7 +800,6 @@ function drawRoundedQuad(ctx, pts, r){
     const pPrev = pts[(i-1+n)%n];
     const p = pts[i];
     const pNext = pts[(i+1)%n];
-
     const rr = clampR(pPrev,p,pNext,r);
 
     const v1x = pPrev.x - p.x, v1y = pPrev.y - p.y;
@@ -725,7 +820,6 @@ function drawRoundedQuad(ctx, pts, r){
   ctx.fill();
 }
 
-// 3D helpers
 function hslToRgb(h, s, l){
   h/=360; s/=100; l/=100;
   const hue2rgb=(p,q,t)=>{
@@ -760,9 +854,8 @@ function shadeHsl(hsl, dl){
   return rgbStr(rgb, 1);
 }
 
-// ---------- Sky decor (cloud/sun/moon/stars/planet) ----------
+// Sky decor (保持你原本視差概念；畫在螢幕座標即可)
 function seededRand(seed){
-  // small deterministic rand
   let x = Math.sin(seed) * 10000;
   return x - Math.floor(x);
 }
@@ -816,30 +909,25 @@ function drawPlanet(ctx, x, y, r){
   ctx.fillStyle = "rgba(160,210,255,1)";
   ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
 
-  // ring
   ctx.globalAlpha = 0.35;
   ctx.strokeStyle = "rgba(255,255,255,1)";
   ctx.lineWidth = 6;
   ctx.beginPath();
   ctx.ellipse(x, y+2, r*1.4, r*0.55, -0.35, 0, Math.PI*2);
   ctx.stroke();
-
   ctx.restore();
 }
 function drawSkyDecor(ctx){
-  // 以相機捲動做視差：越遠的物件移動越慢
   const cam = currentScrollY;
   const par1 = cam * 0.25;
   const par2 = cam * 0.12;
 
-  // stage by level
   const hasCloud = level < 15;
   const hasSun = level < 10;
   const hasMoon = (level >= 10 && level < 20);
   const hasStars = level >= 15;
   const hasPlanet = level >= 22;
 
-  // clouds
   if(hasCloud){
     const n = 5;
     for(let i=0;i<n;i++){
@@ -851,18 +939,9 @@ function drawSkyDecor(ctx){
       drawCloud(ctx, rx, y, s, 0.55);
     }
   }
+  if(hasSun)  drawSun(ctx, viewW*0.82, 110 + (par2 % 200)*0.12, 34);
+  if(hasMoon) drawMoon(ctx, viewW*0.80, 120 + (par2 % 260)*0.10, 28);
 
-  // sun
-  if(hasSun){
-    drawSun(ctx, viewW*0.82, 110 + (par2 % 200)*0.12, 34);
-  }
-
-  // moon
-  if(hasMoon){
-    drawMoon(ctx, viewW*0.80, 120 + (par2 % 260)*0.10, 28);
-  }
-
-  // stars
   if(hasStars){
     const starCount = 24;
     for(let i=0;i<starCount;i++){
@@ -875,32 +954,32 @@ function drawSkyDecor(ctx){
       drawStar(ctx, x, y, r, a);
     }
   }
-
-  // planet
-  if(hasPlanet){
-    drawPlanet(ctx, viewW*0.18, 140 + (par1 % 220)*0.10, 34);
-  }
+  if(hasPlanet) drawPlanet(ctx, viewW*0.18, 140 + (par1 % 220)*0.10, 34);
 }
 
-// Render
+// ✅ 這裡是關鍵修正：用 camY 把世界座標轉成螢幕座標
 Events.on(render,'afterRender',()=>{
-  const ctx=render.context;
-  const now=engine.timing.timestamp;
+  const ctx = render.context;
+  const now = engine.timing.timestamp;
 
-  // ✅ 先畫天空物件（在最底層）
+  const camY = render.bounds.min.y; // ✅ 相機頂端世界座標
+  const toScreenY = (y)=> y - camY;
+
+  // 先畫天空（天空用螢幕座標）
   drawSkyDecor(ctx);
 
-  // ground (visible)
+  // ground（用螢幕座標）
   if(ground){
+    const gy = toScreenY(groundY - groundH/2);
     ctx.save();
     ctx.fillStyle = "rgba(44,62,80,1)";
-    ctx.fillRect(0, groundY - groundH/2, viewW, groundH);
+    ctx.fillRect(0, gy, viewW, groundH);
     ctx.fillStyle = "rgba(255,255,255,0.08)";
-    ctx.fillRect(0, groundY - groundH/2, viewW, 10);
+    ctx.fillRect(0, gy, viewW, 10);
     ctx.restore();
   }
 
-  // draw list (never flat)
+  // draw list
   const list = [];
   list.push(...stackedBlocks);
   if(currentCraneBlock) list.push(currentCraneBlock);
@@ -909,7 +988,7 @@ Events.on(render,'afterRender',()=>{
 
   for(const b of list){
     const w=(b.bounds.max.x-b.bounds.min.x);
-    const h=40;
+    const h=BLOCK_H;
 
     const baseColor = (b.plugin && b.plugin.baseColor) ? b.plugin.baseColor : "hsl(200,70%,60%)";
     const front = shadeHsl(baseColor, 0);
@@ -918,10 +997,12 @@ Events.on(render,'afterRender',()=>{
 
     const dx = 10;
     const dy = -8;
-    const r = 8; // ✅ 立體面圓角
+    const r = 8;
 
     ctx.save();
-    ctx.translate(b.position.x,b.position.y);
+
+    // ✅ 位置要扣 camY
+    ctx.translate(b.position.x, toScreenY(b.position.y));
     ctx.rotate(b.angle);
 
     const glowUntil=b.plugin && b.plugin.glowUntil ? b.plugin.glowUntil : 0;
@@ -932,7 +1013,7 @@ Events.on(render,'afterRender',()=>{
       ctx.shadowBlur=0;
     }
 
-    // Top face (rounded quad)
+    // Top face
     ctx.fillStyle = top;
     drawRoundedQuad(ctx, [
       {x:-w/2,      y:-h/2},
@@ -941,7 +1022,7 @@ Events.on(render,'afterRender',()=>{
       {x: w/2,      y:-h/2}
     ], r);
 
-    // Side face (rounded quad)
+    // Side face
     ctx.fillStyle = side;
     drawRoundedQuad(ctx, [
       {x: w/2,      y:-h/2},
@@ -950,10 +1031,10 @@ Events.on(render,'afterRender',()=>{
       {x: w/2,      y: h/2}
     ], r);
 
-    // Front face (rounded rect)
+    // Front face
     ctx.fillStyle = front;
     ctx.beginPath();
-    if(typeof ctx.roundRect==="function") ctx.roundRect(-w/2, -h/2, w, h, 10);
+    if(typeof ctx.roundRect==="function") ctx.roundRect(-w/2, -h/2, w, h, 12);
     else ctx.rect(-w/2, -h/2, w, h);
     ctx.fill();
 
@@ -961,35 +1042,38 @@ Events.on(render,'afterRender',()=>{
     ctx.shadowBlur = 0;
     ctx.fillStyle = "rgba(255,255,255,0.18)";
     ctx.beginPath();
-    ctx.moveTo(-w*0.18, -h/2);
-    ctx.lineTo(0, -h*0.85);
-    ctx.lineTo(w*0.18, -h/2);
+    ctx.moveTo(-w*0.22, -h/2);
+    ctx.lineTo(0, -h*0.92);
+    ctx.lineTo(w*0.22, -h/2);
     ctx.closePath();
     ctx.fill();
 
     // Windows
     const win = "rgba(255,255,255,0.28)";
     const winHi = "rgba(255,255,255,0.16)";
-    for(let i=-1;i<=1;i++){
-      const wx = i*(w/4)-5;
-      const wy = -8;
-      ctx.fillStyle = win;
-      ctx.fillRect(wx, wy, 10, 13);
-      ctx.fillStyle = winHi;
-      ctx.fillRect(wx+1.5, wy+1.5, 7, 3);
+    const rows = [-h*0.15, h*0.18];
+    for(const rowY of rows){
+      for(let i=-1;i<=1;i++){
+        const wx = i*(w/4)-6;
+        const wy = rowY - 10;
+        ctx.fillStyle = win;
+        ctx.fillRect(wx, wy, 12, 16);
+        ctx.fillStyle = winHi;
+        ctx.fillRect(wx+2, wy+2, 8, 4);
+      }
     }
 
     ctx.restore();
   }
 
-  // particles
+  // particles（要扣 camY）
   ctx.save();
   ctx.globalCompositeOperation="lighter";
   for(const p of particles){
     const alpha=Math.max(0,Math.min(1,p.life/0.85));
     ctx.globalAlpha=alpha;
     ctx.beginPath();
-    ctx.arc(p.x,p.y,2.2,0,Math.PI*2);
+    ctx.arc(p.x, toScreenY(p.y), 2.2, 0, Math.PI*2);
     ctx.fillStyle="rgba(255, 209, 102, 1)";
     ctx.fill();
   }
@@ -997,7 +1081,7 @@ Events.on(render,'afterRender',()=>{
   ctx.globalAlpha=1;
   ctx.globalCompositeOperation="source-over";
 
-  // popups
+  // popups（要扣 camY）
   ctx.save();
   ctx.textAlign="center";
   ctx.textBaseline="middle";
@@ -1015,11 +1099,92 @@ Events.on(render,'afterRender',()=>{
     ctx.shadowBlur=isComboKind?16:10;
     ctx.shadowColor=isComboKind?"rgba(255,209,102,0.65)":"rgba(255,255,255,0.45)";
     ctx.fillStyle=color;
-    ctx.fillText(m.text,m.x,m.y);
+    ctx.fillText(m.text, m.x, toScreenY(m.y));
   }
   ctx.restore();
   ctx.globalAlpha=1;
 });
+
+// Leaderboard
+const LB_KEY = "star_builder_lb_v1";
+const LB_MAX = 50;
+
+function loadLB(){
+  try{
+    const raw = localStorage.getItem(LB_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  }catch(e){ return []; }
+}
+function saveLB(arr){
+  try{ localStorage.setItem(LB_KEY, JSON.stringify(arr.slice(0, LB_MAX))); }
+  catch(e){}
+}
+function sortLB(arr){
+  arr.sort((a,b)=>{
+    if(b.level !== a.level) return b.level - a.level;
+    if(b.score !== a.score) return b.score - a.score;
+    return b.combo - a.combo;
+  });
+  return arr;
+}
+function addToLB(entry){
+  const arr = loadLB();
+  arr.push(entry);
+  sortLB(arr);
+  saveLB(arr);
+  return arr;
+}
+function fmtTime(ts){
+  const d = new Date(ts);
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  const hh = String(d.getHours()).padStart(2,'0');
+  const mi = String(d.getMinutes()).padStart(2,'0');
+  return `${mm}/${dd} ${hh}:${mi}`;
+}
+function renderLB(arr, highlightId){
+  const wrap = document.getElementById('lb-wrap');
+  const list = document.getElementById('lb-list');
+  if(!wrap || !list) return;
+
+  wrap.style.display = "block";
+  list.innerHTML = "";
+
+  const top = arr.slice(0, 30);
+  top.forEach((it, idx)=>{
+    const row = document.createElement('div');
+    row.className = "lb-row" + (it.id === highlightId ? " lb-me" : "");
+    row.innerHTML = `
+      <div>${idx+1}</div>
+      <div>${it.level}</div>
+      <div>${it.score}</div>
+      <div>${it.combo}</div>
+      <div style="opacity:.75;">${fmtTime(it.ts)}</div>
+    `;
+    list.appendChild(row);
+  });
+
+  const myIndex = arr.findIndex(x=>x.id===highlightId);
+  if(myIndex >= 30){
+    const sep = document.createElement('div');
+    sep.className = "lb-row";
+    sep.innerHTML = `<div>…</div><div>…</div><div>…</div><div>…</div><div></div>`;
+    list.appendChild(sep);
+
+    const it = arr[myIndex];
+    const row = document.createElement('div');
+    row.className = "lb-row lb-me";
+    row.innerHTML = `
+      <div>${myIndex+1}</div>
+      <div>${it.level}</div>
+      <div>${it.score}</div>
+      <div>${it.combo}</div>
+      <div style="opacity:.75;">${fmtTime(it.ts)}</div>
+    `;
+    list.appendChild(row);
+  }
+}
 
 // Retry
 function onRetry(e){
@@ -1033,6 +1198,32 @@ btnRetry.addEventListener('touchstart', (e)=>{ e.preventDefault(); onRetry(e); }
 // Input
 window.addEventListener('mousedown', drop);
 window.addEventListener('touchstart', (e)=>{ e.preventDefault(); drop(); }, { passive:false });
+
+// Resize
+function rebuildGround(){
+  if(ground) World.remove(world, ground);
+  groundY = WORLD_HEIGHT - 100;
+  ground = Bodies.rectangle(viewW/2, groundY, viewW, groundH, {
+    isStatic: true,
+    restitution: 0.0,
+    friction: 1.0,
+    frictionStatic: 1.0,
+    render: { visible:false }
+  });
+  World.add(world, ground);
+}
+window.addEventListener('resize', ()=>{
+  viewW = window.innerWidth;
+  viewH = window.innerHeight;
+  WORLD_HEIGHT = viewH * 60;
+
+  Render.setSize(render, viewW, viewH);
+  Render.setPixelRatio(render, window.devicePixelRatio || 1);
+
+  rebuildGround();
+  currentScrollY = Math.max(0, groundY - viewH + 160);
+  applyCamera();
+});
 
 // Start
 Render.run(render);
