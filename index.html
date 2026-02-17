@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>星際建築師 - 倒塌即結束/全面圓角/天空物件</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+  <style>
+    body{
+      margin:0; overflow:hidden;
+      font-family:'Segoe UI',sans-serif;
+      touch-action:manipulation;
+      transition: background 1.2s ease;
+      background: linear-gradient(#87CEEB, #cfefff);
+    }
+
+    #ui{
+      position:absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index:10;
+      pointer-events:none;
+      color:white;
+      width: min(520px, 92vw);
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    #hud-top{ display:flex; gap:10px; }
+    .stat-card{
+      flex: 1;
+      background: rgba(0,0,0,0.28);
+      padding: 10px 14px;
+      border-radius: 14px;
+      border: 2px solid rgba(78,204,163,0.55);
+      backdrop-filter: blur(10px);
+      min-width: 0;
+    }
+    .label{
+      font-size: 11px;
+      color: rgba(78,204,163,0.90);
+      text-transform:uppercase;
+      letter-spacing: 0.6px;
+    }
+    .value{
+      font-size: 22px;
+      font-weight: 900;
+      margin-top: 2px;
+      text-shadow: 0 6px 18px rgba(0,0,0,0.25);
+    }
+    #timer-card{ width: 100%; }
+    #timer-bar{
+      width:100%;
+      height:6px;
+      background: rgba(0,0,0,0.35);
+      border-radius:3px;
+      margin-top:8px;
+      overflow:hidden;
+    }
+    #timer-fill{ width:100%; height:100%; background:#ff416c; }
+
+    #game-viewport{ width:100vw; height:100vh; transition: transform 0.35s ease-out; }
+    canvas{ display:block; }
+
+    #overlay{
+      position:absolute; inset:0;
+      display:grid; place-items:center;
+      z-index:50;
+      opacity:0;
+      pointer-events:none;
+      transition: opacity 0.18s ease;
+    }
+    #overlay.show{ opacity:1; pointer-events:auto; }
+    #overlay .backdrop{
+      position:absolute; inset:0;
+      background: rgba(0,0,0,0.62);
+      backdrop-filter: blur(2px);
+    }
+    #overlay .panel{
+      position:relative;
+      width:min(560px, 92vw);
+      border-radius: 18px;
+      padding: 18px 18px 16px 18px;
+      border: 2px solid rgba(255,255,255,0.18);
+      background: rgba(0,0,0,0.30);
+      box-shadow: 0 16px 50px rgba(0,0,0,0.35);
+      color:white;
+    }
+    #overlay h1{
+      margin: 2px 0 8px 0;
+      font-size: 40px;
+      letter-spacing: 1px;
+      font-weight: 900;
+      text-shadow: 0 0 18px rgba(255,255,255,0.35);
+    }
+    #overlay p{
+      margin: 0 0 10px 0;
+      opacity: 0.92;
+      line-height: 1.35;
+      font-size: 16px;
+    }
+    .summary{
+      margin-top: 10px;
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .card{
+      border-radius: 14px;
+      padding: 12px 12px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: rgba(0,0,0,0.22);
+    }
+    .card .k{ font-size: 12px; color: rgba(255,255,255,0.75); text-transform: uppercase; letter-spacing: 0.8px; }
+    .card .v{ margin-top: 4px; font-size: 26px; font-weight: 900; }
+
+    .actions{ margin-top: 14px; display:flex; justify-content:flex-end; }
+    button{
+      appearance:none; border:none;
+      border-radius: 14px;
+      padding: 12px 16px;
+      font-weight: 900;
+      cursor:pointer;
+      background: #4ecca3;
+      color: #0b1a14;
+    }
+    button:active{ transform: scale(0.98); }
+  </style>
+</head>
+
+<body>
+  <div id="ui">
+    <div id="hud-top">
+      <div class="stat-card">
+        <div class="label">Score</div>
+        <div id="score" class="value">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Level</div>
+        <div id="level" class="value">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Combo</div>
+        <div id="combo" class="value">0</div>
+      </div>
+    </div>
+
+    <div class="stat-card" id="timer-card">
+      <div class="label">Time</div>
+      <div id="timer-text" class="value">8.0</div>
+      <div id="timer-bar"><div id="timer-fill"></div></div>
+    </div>
+  </div>
+
+  <div id="overlay" aria-hidden="true">
+    <div class="backdrop"></div>
+    <div class="panel" role="dialog" aria-modal="true">
+      <h1 id="ov-title">建築物倒塌</h1>
+      <p id="ov-sub">正在崩塌中…</p>
+
+      <div class="summary" id="ov-summary" style="display:none;">
+        <div class="card">
+          <div class="k">Final Height</div>
+          <div class="v" id="ov-height">0</div>
+        </div>
+        <div class="card">
+          <div class="k">Final Score</div>
+          <div class="v" id="ov-score">0</div>
+        </div>
+      </div>
+
+      <div class="actions" id="ov-actions" style="display:none;">
+        <button id="btn-retry" type="button">再玩一次</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="game-viewport"></div>
+
+<script>
+const { Engine, Render, Runner, World, Bodies, Body, Events } = Matter;
+
+// Engine
+const engine = Engine.create();
+const world = engine.world;
+engine.positionIterations = 10;
+engine.velocityIterations = 8;
+engine.constraintIterations = 4;
+world.gravity.y = 1;
+
+const viewW = window.innerWidth;
+const viewH = window.innerHeight;
+const viewport = document.getElementById('game-viewport');
+const WORLD_HEIGHT = viewH * 15;
+
+const render = Render.create({
+  element: viewport,
+  engine,
+  options: { width: viewW, height: WORLD_HEIGHT, wireframes: false, background: 'transparent' }
+});
+
+// UI refs
+const overlay = document.getElementById('overlay');
+const ovTitle = document.getElementById('ov-title');
+const ovSub = document.getElementById('ov-sub');
+const ovSummary = document.getElementById('ov-summary');
+const ovHeight = document.getElementById('ov-height');
+const ovScore = document.getElementById('ov-score');
+const ovActions = document.getElementById('ov-actions');
+const btnRetry = document.getElementById('btn-retry');
+
+// Tunables
+const ROUND_TIME = 8;
+
+const MATERIAL = { restitution:0.02, friction:0.92, frictionStatic:0.98, frictionAir:0.02, density:0.0022 };
+
+const LANDING_STABILIZE = { frictionAirBoost:0.14, durationMs:70, velXScale:0.06, velYScale:0.45, angScale:0.22 };
+
+const STABILITY = { windowMs:160, maxAngleRad:0.55, maxOmega:1.6, maxYDrop:48, maxXDrift:40 };
+
+// ✅ 倒塌偵測器：解決「明明在倒塌但遊戲不結束」
+const COLLAPSE = {
+  // 只要塔「連續」出現失穩趨勢超過 holdMs 就直接 Game Over
+  holdMs: 180,
+  // 失穩判定（偏敏感但不會誤判太多）
+  angleRad: 0.85,         // ~48.7°
+  omega: 2.4,
+  speed: 6.2,
+  xPadding: 260,
+  outOfViewPadding: 220
+};
+
+const FAIL = { outOfViewPadding:220, outOfWorldPadding:600, xPadding:240 };
+const GAMEOVER = { removeGroundMs:350, showSummaryMs:1150 }; // ✅ 更快進結算（避免拖太久）
+
+// Ground
+const groundY = WORLD_HEIGHT - 100;
+const groundH = 120;
+let ground = Bodies.rectangle(viewW/2, groundY, viewW, groundH, {
+  isStatic: true,
+  restitution: 0.0,
+  friction: 1.0,
+  frictionStatic: 1.0,
+  render: { visible:false }
+});
+World.add(world, ground);
+
+// Camera
+let currentScrollY = viewH * 14;
+viewport.style.transform = `translateY(-${currentScrollY}px)`;
+
+// Game state
+let state = "running";
+let endReason = "";
+
+let score = 0, level = 0, combo = 0, timeLeft = ROUND_TIME;
+let inputLock = false;
+
+let currentCraneBlock = null;
+let fallingBlock = null;
+const stackedBlocks = [];
+
+let swingTime = 0;
+const craneRadius = 220;
+let cranePivotX = 0;
+let cranePivotY = 0;
+
+let lastTimestamp = null;
+
+const particles = [];
+const popups = [];
+
+let pendingCommit = null; // { body, base, startTs, startX, startY, diff, w }
+let spawnQueued = false;
+
+// collapse detector state
+let collapseBadMs = 0;
+
+// UI helpers
+function updateUI(){
+  document.getElementById('score').innerText = score;
+  document.getElementById('level').innerText = level;
+  document.getElementById('combo').innerText = combo;
+}
+function updateTimerUI(){
+  const t = Math.max(0, timeLeft);
+  document.getElementById('timer-text').innerText = t.toFixed(1);
+  document.getElementById('timer-fill').style.width = (t / ROUND_TIME * 100) + "%";
+}
+function setBackgroundForLevel(lvl){
+  // ✅ 保留你喜歡的漸層變化，改成階段漸層（更漂亮）
+  let bg = "linear-gradient(#87CEEB, #cfefff)";
+  if(lvl >= 5)  bg = "linear-gradient(#5fb8ff, #bfe8ff)";
+  if(lvl >= 10) bg = "linear-gradient(#1e3c72, #6bb6ff)";
+  if(lvl >= 15) bg = "linear-gradient(#1a1a2e, #0d2b5c)";
+  if(lvl >= 20) bg = "linear-gradient(#050505, #0b1a2e)";
+  document.body.style.background = bg;
+}
+function showOverlayCollapsing(reasonText){
+  overlay.classList.add('show');
+  overlay.setAttribute('aria-hidden','false');
+  ovTitle.textContent = "建築物倒塌";
+  ovSub.textContent = reasonText + "（崩塌中…）";
+  ovSummary.style.display = "none";
+  ovActions.style.display = "none";
+}
+function showOverlaySummary(){
+  overlay.classList.add('show');
+  overlay.setAttribute('aria-hidden','false');
+  ovTitle.textContent = "遊戲結束";
+  ovSub.textContent = endReason;
+  ovHeight.textContent = String(level);
+  ovScore.textContent = String(score);
+  ovSummary.style.display = "grid";
+  ovActions.style.display = "flex";
+}
+
+// VFX helpers
+function spawnParticles(x,y,count=18){
+  for(let i=0;i<count;i++){
+    const a=Math.random()*Math.PI*2;
+    const sp=1.8+Math.random()*3.6;
+    particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-1.6,life:0.5+Math.random()*0.35});
+  }
+}
+function addPopup(kind,text,x,y){
+  popups.push({kind,text,x,y,age:0,life:0.75,rise:-22});
+}
+function easeOutCubic(t){return 1-Math.pow(1-t,3);}
+function clamp01(x){return Math.max(0,Math.min(1,x));}
+function popupScale(t01){
+  if(t01<0.22){const u=t01/0.22;return 0.8+easeOutCubic(u)*0.7;}
+  if(t01<0.42){const u=(t01-0.22)/0.20;return 1.5-easeOutCubic(u)*0.5;}
+  return 1.0;
+}
+function popupAlpha(t01){
+  if(t01<0.55) return 1;
+  const u=(t01-0.55)/0.45;
+  return 1-easeOutCubic(clamp01(u));
+}
+
+// Spawn / Drop
+function spawnBlock(){
+  if(state!=="running") return;
+  if(spawnQueued) return;
+  if(inputLock) return;
+
+  const w = level>=20 ? 60 : (level>=10 ? 90 : 120);
+  const highestY = stackedBlocks.length>0 ? stackedBlocks[stackedBlocks.length-1].position.y : groundY-60;
+  const spawnY = highestY - 200;
+
+  const hue = (level * 28 + Math.random()*12) % 360;
+  const baseColor = `hsl(${hue}, 72%, 62%)`;
+
+  currentCraneBlock = Bodies.rectangle(viewW/2, spawnY, w, 40, {
+    isStatic:true,
+    isSensor:true,
+    restitution:MATERIAL.restitution,
+    friction:MATERIAL.friction,
+    frictionStatic:MATERIAL.frictionStatic,
+    frictionAir:MATERIAL.frictionAir,
+    density:MATERIAL.density,
+    render:{ visible:false }
+  });
+
+  currentCraneBlock.plugin = currentCraneBlock.plugin || {};
+  currentCraneBlock.plugin.baseColor = baseColor;
+
+  cranePivotX = viewW/2;
+  cranePivotY = spawnY - craneRadius;
+
+  World.add(world,currentCraneBlock);
+}
+
+function drop(){
+  if(state!=="running") return;
+  if(inputLock) return;
+  if(!currentCraneBlock) return;
+  if(fallingBlock || pendingCommit) return;
+
+  inputLock = true;
+
+  const b=currentCraneBlock;
+  Body.setStatic(b,false);
+  b.isSensor=false;
+  Body.setAngularVelocity(b,0);
+  Body.setVelocity(b,{x:0,y:1.2});
+
+  currentCraneBlock=null;
+  fallingBlock=b;
+}
+
+// Landing pipeline
+function stabilizeOnLanding(body){
+  const prevAir=body.frictionAir;
+  body.frictionAir=LANDING_STABILIZE.frictionAirBoost;
+
+  Body.setVelocity(body,{
+    x: body.velocity.x * LANDING_STABILIZE.velXScale,
+    y: body.velocity.y * LANDING_STABILIZE.velYScale
+  });
+  Body.setAngularVelocity(body, body.angularVelocity * LANDING_STABILIZE.angScale);
+
+  setTimeout(()=>{
+    if(state!=="running") return;
+    body.frictionAir=prevAir;
+  }, LANDING_STABILIZE.durationMs);
+}
+
+function beginPendingCommit(body){
+  const base = stackedBlocks.length>0 ? stackedBlocks[stackedBlocks.length-1] : ground;
+  const diff = Math.abs(body.position.x - base.position.x);
+  const w = (body.bounds.max.x - body.bounds.min.x);
+
+  if(diff > w*0.85){
+    startGameOver("房子傾倒了！");
+    return;
+  }
+
+  const isFirstLanding = (level === 0);
+  if(!isFirstLanding){
+    const perfect = diff < w*0.05;
+    if(perfect){
+      const nextCombo = combo + 1;
+      const text = (nextCombo >= 2) ? `${nextCombo} COMBO!` : "PERFECT!";
+      addPopup("combo", text, body.position.x, body.position.y-66);
+      spawnParticles(body.position.x, body.position.y, (nextCombo>=2) ? 30 : 22);
+    }else{
+      addPopup("nice","NICE", body.position.x, body.position.y-66);
+      spawnParticles(body.position.x, body.position.y, 16);
+    }
+  }
+
+  stabilizeOnLanding(body);
+
+  pendingCommit = {
+    body,
+    base,
+    startTs: engine.timing.timestamp,
+    startX: body.position.x,
+    startY: body.position.y,
+    diff,
+    w
+  };
+
+  fallingBlock = null;
+}
+
+function updatePendingCommit(nowTs){
+  if(!pendingCommit || state!=="running") return;
+  const b = pendingCommit.body;
+
+  if (b.position.y > currentScrollY + viewH + FAIL.outOfViewPadding ||
+      b.position.x < -FAIL.xPadding || b.position.x > viewW + FAIL.xPadding ||
+      b.position.y > WORLD_HEIGHT + FAIL.outOfWorldPadding) {
+    startGameOver("建築掉落！");
+    return;
+  }
+
+  const elapsed = nowTs - pendingCommit.startTs;
+  const yDrop = b.position.y - pendingCommit.startY;
+  const xDrift = Math.abs(b.position.x - pendingCommit.startX);
+  const absAngle = Math.abs(b.angle);
+  const absOmega = Math.abs(b.angularVelocity);
+
+  if (absAngle > STABILITY.maxAngleRad) { startGameOver("房子傾倒了！"); return; }
+  if (yDrop > STABILITY.maxYDrop) { startGameOver("房子傾倒了！"); return; }
+  if (xDrift > STABILITY.maxXDrift) { startGameOver("房子傾倒了！"); return; }
+
+  if (elapsed >= STABILITY.windowMs) {
+    if (absOmega > STABILITY.maxOmega) { startGameOver("房子傾倒了！"); return; }
+    commitSuccess();
+  }
+}
+
+function commitSuccess(){
+  if(!pendingCommit || state!=="running") return;
+
+  const { body, diff, w } = pendingCommit;
+  const isFirstLanding = (level === 0);
+
+  level++;
+
+  if(!isFirstLanding){
+    const perfect = diff < w*0.05;
+    if(perfect){
+      combo++;
+      score += 10 + (combo*25);
+    }else{
+      combo = 0;
+      score += 10;
+    }
+    const now=engine.timing.timestamp;
+    body.plugin = body.plugin || {};
+    body.plugin.glowUntil = now + (perfect ? 520 : 320);
+  }else{
+    combo = 0;
+  }
+
+  stackedBlocks.push(body);
+
+  timeLeft = ROUND_TIME;
+  updateTimerUI();
+  setBackgroundForLevel(level);
+  updateUI();
+
+  if(level>3){
+    currentScrollY=(viewH*14)-(level-3)*40;
+    viewport.style.transform=`translateY(-${currentScrollY}px)`;
+  }
+
+  pendingCommit = null;
+
+  inputLock = false;
+  spawnQueued = true;
+  setTimeout(()=>{
+    spawnQueued = false;
+    if(state==="running") spawnBlock();
+  }, 140);
+}
+
+// Collision rule: 第 1 塊允許落地板；第 2 塊起碰地板即死
+Events.on(engine,'collisionStart',(event)=>{
+  if(state!=="running") return;
+  if(!fallingBlock || pendingCommit) return;
+
+  for(const pair of event.pairs){
+    const hitFalling = (pair.bodyA===fallingBlock || pair.bodyB===fallingBlock);
+    if(!hitFalling) continue;
+
+    const other = (pair.bodyA===fallingBlock) ? pair.bodyB : pair.bodyA;
+
+    if(other === ground){
+      if(level > 0){
+        startGameOver("掉到地板！");
+        return;
+      }
+      beginPendingCommit(fallingBlock);
+      return;
+    }
+
+    beginPendingCommit(fallingBlock);
+    return;
+  }
+});
+
+// ✅ 倒塌偵測：解決「已倒塌但遲遲不結束」
+// 只要塔有明顯崩塌趨勢一段時間，直接 startGameOver（running 狀態才生效）
+function updateCollapseDetector(dt){
+  if(state!=="running") return;
+  if(level < 2) { collapseBadMs = 0; return; } // 太低不偵測，避免誤判
+
+  let bad = false;
+
+  // 1) 任一堆疊方塊掉出視野/左右飄太遠
+  for(const b of stackedBlocks){
+    if(b.position.y > currentScrollY + viewH + COLLAPSE.outOfViewPadding) { bad = true; break; }
+    if(b.position.x < -COLLAPSE.xPadding || b.position.x > viewW + COLLAPSE.xPadding) { bad = true; break; }
+  }
+
+  // 2) 任一堆疊方塊角度/角速度/速度過大（表示已失穩）
+  if(!bad){
+    for(const b of stackedBlocks){
+      const absAngle = Math.abs(b.angle);
+      const absOmega = Math.abs(b.angularVelocity);
+      const sp = Math.hypot(b.velocity.x, b.velocity.y);
+      if(absAngle > COLLAPSE.angleRad || absOmega > COLLAPSE.omega || sp > COLLAPSE.speed){
+        bad = true; break;
+      }
+    }
+  }
+
+  // 3) 若正在 pendingCommit 或 fallingBlock，本來就可能動，避免誤判：稍微放寬
+  if(pendingCommit || fallingBlock){
+    if(bad) collapseBadMs += dt*1000 * 0.55;
+    else collapseBadMs = Math.max(0, collapseBadMs - dt*1000 * 0.7);
+  } else {
+    if(bad) collapseBadMs += dt*1000;
+    else collapseBadMs = Math.max(0, collapseBadMs - dt*1000 * 0.9);
+  }
+
+  if(collapseBadMs >= COLLAPSE.holdMs){
+    startGameOver("建築倒塌！");
+  }
+}
+
+// Game Over
+function startGameOver(reason){
+  if(state!=="running") return;
+
+  state="collapsing";
+  endReason=reason;
+
+  inputLock = true;
+  spawnQueued = false;
+  fallingBlock = null;
+  pendingCommit = null;
+
+  if(currentCraneBlock){
+    World.remove(world,currentCraneBlock);
+    currentCraneBlock=null;
+  }
+
+  showOverlayCollapsing(reason);
+
+  // 你喜歡的倒塌畫面保留
+  const n=stackedBlocks.length;
+  for(let i=0;i<n;i++){
+    const b=stackedBlocks[i];
+    const t=(i+1)/Math.max(1,n);
+    const dir=-1;
+    const fx=dir*(0.00008+0.00018*t)*b.mass;
+    const fy=(0.00002*t)*b.mass;
+    Body.applyForce(b,b.position,{x:fx,y:fy});
+    Body.setAngularVelocity(b, b.angularVelocity + dir*(0.02+0.06*t));
+  }
+
+  setTimeout(()=>{
+    if(ground){
+      World.remove(world,ground);
+      ground=null;
+    }
+  }, GAMEOVER.removeGroundMs);
+
+  // ✅ 更快進結算（你反映拖太久）
+  setTimeout(()=>{
+    state="ended";
+    showOverlaySummary();
+  }, GAMEOVER.showSummaryMs);
+}
+
+// Update loop
+Events.on(engine,'beforeUpdate',()=>{
+  const ts=engine.timing.timestamp;
+  if(lastTimestamp==null) lastTimestamp=ts;
+  const dt=(ts-lastTimestamp)/1000;
+  lastTimestamp=ts;
+
+  updateVfx(dt);
+
+  if(state!=="running") return;
+
+  if(currentCraneBlock){
+    const speed=0.03+(level*0.003);
+    swingTime+=speed;
+    const angle=Math.sin(swingTime)*(Math.PI/4);
+    const nextX=cranePivotX+Math.sin(angle)*craneRadius;
+    const nextY=cranePivotY+Math.cos(angle)*craneRadius;
+    Body.setPosition(currentCraneBlock,{x:nextX,y:nextY});
+    Body.setAngle(currentCraneBlock,-angle);
+    Body.setVelocity(currentCraneBlock,{x:0,y:0});
+    Body.setAngularVelocity(currentCraneBlock,0);
+  }
+
+  if(level>0){
+    timeLeft-=dt;
+    updateTimerUI();
+    if(timeLeft<=0){
+      startGameOver("時間耗盡！");
+      return;
+    }
+  }
+
+  if(fallingBlock){
+    const b=fallingBlock;
+    if(b.position.y>currentScrollY+viewH+FAIL.outOfViewPadding){ startGameOver("建築掉落！"); return; }
+    if(b.position.x<-FAIL.xPadding || b.position.x>viewW+FAIL.xPadding){ startGameOver("建築掉落！"); return; }
+    if(b.position.y>WORLD_HEIGHT+FAIL.outOfWorldPadding){ startGameOver("建築掉落！"); return; }
+  }
+
+  updatePendingCommit(ts);
+  updateCollapseDetector(dt); // ✅ 新增：倒塌偵測器
+});
+
+function updateVfx(dt){
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.life-=dt;
+    if(p.life<=0){particles.splice(i,1);continue;}
+    p.vy+=8*dt;
+    p.x+=p.vx; p.y+=p.vy;
+    p.vx*=0.98; p.vy*=0.98;
+  }
+  for(let i=popups.length-1;i>=0;i--){
+    const m=popups[i];
+    m.age+=dt; m.life-=dt;
+    if(m.life<=0){popups.splice(i,1);continue;}
+    m.y+=(m.rise*dt);
+  }
+}
+
+// ---------- Rounded quad helper (for top/side faces) ----------
+function drawRoundedQuad(ctx, pts, r){
+  // pts: [{x,y}*4] in order
+  const n = pts.length;
+  const clampR = (pPrev, p, pNext, rr)=>{
+    const d1 = Math.hypot(p.x - pPrev.x, p.y - pPrev.y);
+    const d2 = Math.hypot(pNext.x - p.x, pNext.y - p.y);
+    return Math.min(rr, d1*0.35, d2*0.35);
+  };
+  ctx.beginPath();
+  for(let i=0;i<n;i++){
+    const pPrev = pts[(i-1+n)%n];
+    const p = pts[i];
+    const pNext = pts[(i+1)%n];
+
+    const rr = clampR(pPrev,p,pNext,r);
+
+    const v1x = pPrev.x - p.x, v1y = pPrev.y - p.y;
+    const v2x = pNext.x - p.x, v2y = pNext.y - p.y;
+
+    const len1 = Math.hypot(v1x,v1y) || 1;
+    const len2 = Math.hypot(v2x,v2y) || 1;
+
+    const p1 = { x: p.x + (v1x/len1)*rr, y: p.y + (v1y/len1)*rr };
+    const p2 = { x: p.x + (v2x/len2)*rr, y: p.y + (v2y/len2)*rr };
+
+    if(i===0) ctx.moveTo(p1.x,p1.y);
+    else ctx.lineTo(p1.x,p1.y);
+
+    ctx.quadraticCurveTo(p.x,p.y,p2.x,p2.y);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+// 3D helpers
+function hslToRgb(h, s, l){
+  h/=360; s/=100; l/=100;
+  const hue2rgb=(p,q,t)=>{
+    if(t<0) t+=1;
+    if(t>1) t-=1;
+    if(t<1/6) return p+(q-p)*6*t;
+    if(t<1/2) return q;
+    if(t<2/3) return p+(q-p)*(2/3-t)*6;
+    return p;
+  };
+  let r,g,b;
+  if(s===0){ r=g=b=l; }
+  else{
+    const q = l < 0.5 ? l*(1+s) : l + s - l*s;
+    const p = 2*l - q;
+    r = hue2rgb(p,q,h + 1/3);
+    g = hue2rgb(p,q,h);
+    b = hue2rgb(p,q,h - 1/3);
+  }
+  return { r: Math.round(r*255), g: Math.round(g*255), b: Math.round(b*255) };
+}
+function parseHsl(str){
+  const m = /hsl\(([\d.]+),\s*([\d.]+)%?,\s*([\d.]+)%?\)/i.exec(str||"");
+  if(!m) return {h:200,s:70,l:60};
+  return {h:parseFloat(m[1]), s:parseFloat(m[2]), l:parseFloat(m[3])};
+}
+function rgbStr({r,g,b}, a=1){ return `rgba(${r},${g},${b},${a})`; }
+function shadeHsl(hsl, dl){
+  const {h,s,l}=parseHsl(hsl);
+  const nl = Math.max(5, Math.min(95, l + dl));
+  const rgb = hslToRgb(h,s,nl);
+  return rgbStr(rgb, 1);
+}
+
+// ---------- Sky decor (cloud/sun/moon/stars/planet) ----------
+function seededRand(seed){
+  // small deterministic rand
+  let x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
+function drawCloud(ctx, x, y, s, a){
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.beginPath();
+  ctx.arc(x, y, 18*s, 0, Math.PI*2);
+  ctx.arc(x+20*s, y-10*s, 22*s, 0, Math.PI*2);
+  ctx.arc(x+45*s, y, 18*s, 0, Math.PI*2);
+  ctx.arc(x+25*s, y+12*s, 22*s, 0, Math.PI*2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+function drawSun(ctx, x, y, r){
+  ctx.save();
+  ctx.globalAlpha = 0.9;
+  ctx.fillStyle = "rgba(255,230,120,1)";
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 0.18;
+  ctx.beginPath(); ctx.arc(x,y,r*2.4,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+function drawMoon(ctx, x, y, r){
+  ctx.save();
+  ctx.globalAlpha = 0.85;
+  ctx.fillStyle = "rgba(230,235,255,1)";
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+  ctx.globalCompositeOperation = "destination-out";
+  ctx.beginPath(); ctx.arc(x+r*0.42,y-r*0.12,r*0.95,0,Math.PI*2); ctx.fill();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.restore();
+}
+function drawStar(ctx, x, y, r, a){
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.fillStyle = "rgba(255,255,255,1)";
+  ctx.beginPath();
+  ctx.moveTo(x, y-r);
+  ctx.lineTo(x+r*0.55, y+r*0.2);
+  ctx.lineTo(x-r*0.55, y+r*0.2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+function drawPlanet(ctx, x, y, r){
+  ctx.save();
+  ctx.globalAlpha = 0.9;
+  ctx.fillStyle = "rgba(160,210,255,1)";
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+
+  // ring
+  ctx.globalAlpha = 0.35;
+  ctx.strokeStyle = "rgba(255,255,255,1)";
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.ellipse(x, y+2, r*1.4, r*0.55, -0.35, 0, Math.PI*2);
+  ctx.stroke();
+
+  ctx.restore();
+}
+function drawSkyDecor(ctx){
+  // 以相機捲動做視差：越遠的物件移動越慢
+  const cam = currentScrollY;
+  const par1 = cam * 0.25;
+  const par2 = cam * 0.12;
+
+  // stage by level
+  const hasCloud = level < 15;
+  const hasSun = level < 10;
+  const hasMoon = (level >= 10 && level < 20);
+  const hasStars = level >= 15;
+  const hasPlanet = level >= 22;
+
+  // clouds
+  if(hasCloud){
+    const n = 5;
+    for(let i=0;i<n;i++){
+      const seed = 1000 + i*77;
+      const rx = seededRand(seed) * viewW;
+      const ry = 80 + seededRand(seed+9) * 180;
+      const s = 0.7 + seededRand(seed+3)*0.9;
+      const y = ry + (par2 % 240) * 0.25;
+      drawCloud(ctx, rx, y, s, 0.55);
+    }
+  }
+
+  // sun
+  if(hasSun){
+    drawSun(ctx, viewW*0.82, 110 + (par2 % 200)*0.12, 34);
+  }
+
+  // moon
+  if(hasMoon){
+    drawMoon(ctx, viewW*0.80, 120 + (par2 % 260)*0.10, 28);
+  }
+
+  // stars
+  if(hasStars){
+    const starCount = 24;
+    for(let i=0;i<starCount;i++){
+      const seed = 5000 + i*31;
+      const x = seededRand(seed) * viewW;
+      const baseY = 40 + seededRand(seed+5) * 280;
+      const y = baseY + (par1 % 360) * 0.08;
+      const r = 3 + seededRand(seed+8)*3.5;
+      const a = 0.25 + seededRand(seed+11)*0.55;
+      drawStar(ctx, x, y, r, a);
+    }
+  }
+
+  // planet
+  if(hasPlanet){
+    drawPlanet(ctx, viewW*0.18, 140 + (par1 % 220)*0.10, 34);
+  }
+}
+
+// Render
+Events.on(render,'afterRender',()=>{
+  const ctx=render.context;
+  const now=engine.timing.timestamp;
+
+  // ✅ 先畫天空物件（在最底層）
+  drawSkyDecor(ctx);
+
+  // ground (visible)
+  if(ground){
+    ctx.save();
+    ctx.fillStyle = "rgba(44,62,80,1)";
+    ctx.fillRect(0, groundY - groundH/2, viewW, groundH);
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fillRect(0, groundY - groundH/2, viewW, 10);
+    ctx.restore();
+  }
+
+  // draw list (never flat)
+  const list = [];
+  list.push(...stackedBlocks);
+  if(currentCraneBlock) list.push(currentCraneBlock);
+  if(fallingBlock) list.push(fallingBlock);
+  if(pendingCommit?.body) list.push(pendingCommit.body);
+
+  for(const b of list){
+    const w=(b.bounds.max.x-b.bounds.min.x);
+    const h=40;
+
+    const baseColor = (b.plugin && b.plugin.baseColor) ? b.plugin.baseColor : "hsl(200,70%,60%)";
+    const front = shadeHsl(baseColor, 0);
+    const top = shadeHsl(baseColor, +14);
+    const side = shadeHsl(baseColor, -14);
+
+    const dx = 10;
+    const dy = -8;
+    const r = 8; // ✅ 立體面圓角
+
+    ctx.save();
+    ctx.translate(b.position.x,b.position.y);
+    ctx.rotate(b.angle);
+
+    const glowUntil=b.plugin && b.plugin.glowUntil ? b.plugin.glowUntil : 0;
+    if(now<glowUntil){
+      ctx.shadowBlur=18;
+      ctx.shadowColor="rgba(255,209,102,0.75)";
+    }else{
+      ctx.shadowBlur=0;
+    }
+
+    // Top face (rounded quad)
+    ctx.fillStyle = top;
+    drawRoundedQuad(ctx, [
+      {x:-w/2,      y:-h/2},
+      {x:-w/2+dx,   y:-h/2+dy},
+      {x: w/2+dx,   y:-h/2+dy},
+      {x: w/2,      y:-h/2}
+    ], r);
+
+    // Side face (rounded quad)
+    ctx.fillStyle = side;
+    drawRoundedQuad(ctx, [
+      {x: w/2,      y:-h/2},
+      {x: w/2+dx,   y:-h/2+dy},
+      {x: w/2+dx,   y: h/2+dy},
+      {x: w/2,      y: h/2}
+    ], r);
+
+    // Front face (rounded rect)
+    ctx.fillStyle = front;
+    ctx.beginPath();
+    if(typeof ctx.roundRect==="function") ctx.roundRect(-w/2, -h/2, w, h, 10);
+    else ctx.rect(-w/2, -h/2, w, h);
+    ctx.fill();
+
+    // Roof
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(255,255,255,0.18)";
+    ctx.beginPath();
+    ctx.moveTo(-w*0.18, -h/2);
+    ctx.lineTo(0, -h*0.85);
+    ctx.lineTo(w*0.18, -h/2);
+    ctx.closePath();
+    ctx.fill();
+
+    // Windows
+    const win = "rgba(255,255,255,0.28)";
+    const winHi = "rgba(255,255,255,0.16)";
+    for(let i=-1;i<=1;i++){
+      const wx = i*(w/4)-5;
+      const wy = -8;
+      ctx.fillStyle = win;
+      ctx.fillRect(wx, wy, 10, 13);
+      ctx.fillStyle = winHi;
+      ctx.fillRect(wx+1.5, wy+1.5, 7, 3);
+    }
+
+    ctx.restore();
+  }
+
+  // particles
+  ctx.save();
+  ctx.globalCompositeOperation="lighter";
+  for(const p of particles){
+    const alpha=Math.max(0,Math.min(1,p.life/0.85));
+    ctx.globalAlpha=alpha;
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,2.2,0,Math.PI*2);
+    ctx.fillStyle="rgba(255, 209, 102, 1)";
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.globalAlpha=1;
+  ctx.globalCompositeOperation="source-over";
+
+  // popups
+  ctx.save();
+  ctx.textAlign="center";
+  ctx.textBaseline="middle";
+  for(const m of popups){
+    const t01=clamp01(m.age/0.75);
+    const s=popupScale(t01);
+    const a=popupAlpha(t01);
+    const isComboKind=(m.kind==="combo"||m.kind==="perfect");
+    const color=isComboKind?"rgba(255,209,102,1)":"rgba(255,255,255,1)";
+    const baseSize=isComboKind?32:22;
+    const size=Math.round(baseSize*s);
+
+    ctx.globalAlpha=a;
+    ctx.font=`900 ${size}px Segoe UI`;
+    ctx.shadowBlur=isComboKind?16:10;
+    ctx.shadowColor=isComboKind?"rgba(255,209,102,0.65)":"rgba(255,255,255,0.45)";
+    ctx.fillStyle=color;
+    ctx.fillText(m.text,m.x,m.y);
+  }
+  ctx.restore();
+  ctx.globalAlpha=1;
+});
+
+// Retry
+function onRetry(e){
+  e.preventDefault();
+  e.stopPropagation();
+  location.reload();
+}
+btnRetry.addEventListener('click', onRetry);
+btnRetry.addEventListener('touchstart', (e)=>{ e.preventDefault(); onRetry(e); }, { passive:false });
+
+// Input
+window.addEventListener('mousedown', drop);
+window.addEventListener('touchstart', (e)=>{ e.preventDefault(); drop(); }, { passive:false });
+
+// Start
+Render.run(render);
+Runner.run(Runner.create(), engine);
+timeLeft=ROUND_TIME;
+updateTimerUI();
+updateUI();
+setBackgroundForLevel(0);
+spawnBlock();
+</script>
+</body>
+</html>
