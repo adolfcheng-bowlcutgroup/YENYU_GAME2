@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>星際建築師 - 小方塊/地板回底部/相機每2層移動/UI Safe/半封存修11</title>
+  <title>大羽建設(股)</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
   <style>
     body{
@@ -131,7 +131,18 @@
     .card .k{ font-size: 12px; color: rgba(255,255,255,0.75); text-transform: uppercase; letter-spacing: 0.8px; }
     .card .v{ margin-top: 4px; font-size: 26px; font-weight: 900; }
 
-    .actions{ margin-top: 14px; display:flex; justify-content:flex-end; }
+    .actions{
+      margin-top: 12px;
+      display:block;
+    }
+
+    #btn-retry{
+      width:100%;
+      padding: 10px 12px;     /* ✅ 比原本矮 */
+      border-radius: 14px;
+      font-weight: 900;
+      font-size: 16px;
+    }
     button{
       appearance:none; border:none;
       border-radius: 14px;
@@ -219,6 +230,9 @@
         <div class="card"><div class="k">Rank</div><div class="v" id="ov-rank">-</div></div>
       </div>
 
+      <div class="actions" id="ov-actions" style="display:none;">
+        <button id="btn-retry" type="button">再玩一次</button>
+      </div>
       <div class="leaderboard" id="lb-wrap" style="display:none;">
         <div class="lb-title">排行榜（本機）</div>
         <div class="lb-sub">排序：LEVEL ＞ 分數 ＞ COMBO</div>
@@ -228,9 +242,7 @@
         </div>
       </div>
 
-      <div class="actions" id="ov-actions" style="display:none;">
-        <button id="btn-retry" type="button">再玩一次</button>
-      </div>
+
     </div>
   </div>
 
@@ -279,6 +291,16 @@ const timerCard = document.getElementById('timer-card');
 /* =========================
    Tunables
 ========================= */
+
+function relaxFactor(){
+  const tRaw = (level - 10) / 51;
+  const t = Math.max(0, Math.min(1, tRaw));
+  const te = t * t * (3 - 2 * t);
+  return 1.0 + 0.25 * te; // 想更保守就改 0.18
+}
+
+
+
 const ROUND_TIME = 8;
 const MAX_LEVEL = 61;
 const CAMERA_STEP = 1;
@@ -286,8 +308,8 @@ const CAMERA_STEP = 1;
 const MATERIAL = { restitution:0.02, friction:0.92, frictionStatic:0.98, frictionAir:0.02, density:0.0022 };
 const LANDING_STABILIZE = { frictionAirBoost:0.14, durationMs:70, velXScale:0.06, velYScale:0.45, angScale:0.22 };
 
-const STABILITY = { windowMs:220, maxAngleRad:0.72, maxOmega:2.2, maxYDrop:95, maxXDrift:60 };
-const COLLAPSE  = { holdMs:320, angleRad:1.05, omega:3.0, speed:8.0, xPadding:280 };
+const STABILITY = { windowMs:240, maxAngleRad:0.78, maxOmega:2.35, maxYDrop:105, maxXDrift:66 };
+const COLLAPSE  = { holdMs:360, angleRad:1.1, omega:3.15, speed:8.4, xPadding:280 };
 const FAIL = { outOfViewPadding:220, outOfWorldPadding:600, xPadding:240 };
 const GAMEOVER = { removeGroundMs:350, showSummaryMs:1150 };
 
@@ -494,6 +516,9 @@ function updateCamera(){
 ========================= */
 function lerp(a,b,t){ return a + (b-a)*t; }
 function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+
+
+
 function hexToRgb(hex){
   const h = hex.replace('#','');
   const n = parseInt(h.length===3 ? h.split('').map(c=>c+c).join('') : h, 16);
@@ -564,7 +589,7 @@ function showOverlaySummary(rankText){
   ovRank.textContent = rankText ?? "-";
 
   ovSummary.style.display = "grid";
-  ovActions.style.display = "flex";
+  ovActions.style.display = "block";
   btnRetry.style.pointerEvents = "auto";
   ovActions.style.pointerEvents = "auto";
 }
@@ -740,13 +765,14 @@ function updatePendingCommit(nowTs){
   const xDrift = Math.abs(b.position.x - pendingCommit.startX);
   const absAngle = Math.abs(b.angle);
   const absOmega = Math.abs(b.angularVelocity);
+  const rf = relaxFactor();
 
-  if (absAngle > STABILITY.maxAngleRad) { startGameOver("房子傾倒了！"); return; }
-  if (yDrop > STABILITY.maxYDrop) { startGameOver("房子傾倒了！"); return; }
-  if (xDrift > STABILITY.maxXDrift) { startGameOver("房子傾倒了！"); return; }
+  if (absAngle > STABILITY.maxAngleRad * rf) { startGameOver("房子傾倒了！"); return; }
+  if (yDrop    > STABILITY.maxYDrop    * rf) { startGameOver("房子傾倒了！"); return; }
+  if (xDrift   > STABILITY.maxXDrift   * rf) { startGameOver("房子傾倒了！"); return; }
 
   if (elapsed >= STABILITY.windowMs) {
-    if (absOmega > STABILITY.maxOmega) { startGameOver("房子傾倒了！"); return; }
+  if (absOmega > STABILITY.maxOmega * rf) { startGameOver("房子傾倒了！"); return; }
     commitSuccess();
   }
 }
@@ -890,10 +916,21 @@ function updateCollapseDetector(dt){
       const absAngle = Math.abs(b.angle);
       const absOmega = Math.abs(b.angularVelocity);
       const sp = Math.hypot(b.velocity.x, b.velocity.y);
+      const rf = relaxFactor();
+      for(const b of active){
+        const stableUntil = b.plugin?.stableUntil || 0;
+        if(now < stableUntil) continue;
+        if(b.plugin?.sealed) continue;
 
-      if(absAngle > COLLAPSE.angleRad || absOmega > COLLAPSE.omega || sp > COLLAPSE.speed){
-        bad = true; break;
+        const absAngle = Math.abs(b.angle);
+        const absOmega = Math.abs(b.angularVelocity);
+        const sp = Math.hypot(b.velocity.x, b.velocity.y);
+
+        if(absAngle > COLLAPSE.angleRad * rf || absOmega > COLLAPSE.omega * rf || sp > COLLAPSE.speed * rf){
+          bad = true; break;
+        }
       }
+
     }
   }
 
@@ -966,16 +1003,37 @@ Events.on(engine,'beforeUpdate',()=>{
   dampSealedBlocks();
 
   if(currentCraneBlock){
-    const speed=0.03+(level*0.003);
-    swingTime+=speed;
-    const angle=Math.sin(swingTime)*(Math.PI/4);
+    const SPD_MIN = 0.028;
+    const SPD_MAX = 0.062;
+    const SPD_LVL_END = 61;
+
+    const t = clamp01(level / SPD_LVL_END);
+    const te = t * t * (3 - 2 * t);;
+    const speed = lerp(SPD_MIN, SPD_MAX, te);
+
+    swingTime += speed;
+
+    const AMP_MAX = Math.PI / 4;   // 45°（前期好玩）
+    const AMP_MIN = Math.PI / 6;   // 30°（中後期收斂，才堆得上去）
+    const AMP_LVL_END = 35;        // 35層前慢慢縮到 AMP_MIN
+
+    const ta = clamp01(level / AMP_LVL_END);
+    const tae = ta * ta * (3 - 2 * ta);
+    const amp = lerp(AMP_MAX, AMP_MIN, tae);
+
+    const angle = Math.sin(swingTime) * amp;
+
+
     const nextX=cranePivotX+Math.sin(angle)*craneRadius;
     const nextY=cranePivotY+Math.cos(angle)*craneRadius;
+
     Body.setPosition(currentCraneBlock,{x:nextX,y:nextY});
     Body.setAngle(currentCraneBlock,-angle);
     Body.setVelocity(currentCraneBlock,{x:0,y:0});
     Body.setAngularVelocity(currentCraneBlock,0);
   }
+
+
 
   if(level>0){
     timeLeft-=dt;
