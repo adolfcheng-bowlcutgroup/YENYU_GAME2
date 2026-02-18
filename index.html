@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>大羽建設(股)</title>
+  <title>星際建築師 - 小方塊/地板回底部/相機每2層移動/UI Safe/半封存修11</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
   <style>
     body{
@@ -22,21 +22,14 @@
       z-index:10;
       pointer-events:none;
       color:white;
-
       width: min(520px, calc(100vw - 24px));
       box-sizing: border-box;
       padding: 0 2px;
-
       display:flex;
       flex-direction:column;
       gap:10px;
     }
-    #hud-top{
-      display:flex;
-      gap:10px;
-      width: 100%;
-      box-sizing: border-box;
-    }
+    #hud-top{ display:flex; gap:10px; width:100%; box-sizing:border-box; }
     .stat-card{
       flex: 1;
       background: rgba(0,0,0,0.28);
@@ -59,8 +52,7 @@
       margin-top: 2px;
       text-shadow: 0 6px 18px rgba(0,0,0,0.25);
     }
-    #timer-card{ width: 100%; }
-
+    #timer-card{ width:100%; }
     #timer-bar{
       width:100%;
       height:6px;
@@ -71,7 +63,6 @@
     }
     #timer-fill{ width:100%; height:100%; background:#ff416c; }
 
-    /* 3 秒內紅色淡入淡出（35%） */
     @keyframes timeWarnPulse {
       0%   { background: rgba(255, 65, 108, 0.00); }
       50%  { background: rgba(255, 65, 108, 0.35); }
@@ -153,7 +144,6 @@
     }
     button:active{ transform: scale(0.98); }
 
-    /* ---- Leaderboard ---- */
     .leaderboard{
       margin-top: 12px;
       border-radius: 14px;
@@ -161,16 +151,8 @@
       border: 1px solid rgba(255,255,255,0.16);
       background: rgba(0,0,0,0.18);
     }
-    .lb-title{
-      font-weight: 900;
-      letter-spacing: 0.6px;
-      margin-bottom: 2px;
-    }
-    .lb-sub{
-      font-size: 12px;
-      opacity: 0.75;
-      margin-bottom: 8px;
-    }
+    .lb-title{ font-weight: 900; letter-spacing: 0.6px; margin-bottom: 2px; }
+    .lb-sub{ font-size: 12px; opacity: 0.75; margin-bottom: 8px; }
     .lb-scroll{
       max-height: 260px;
       overflow-y: auto;
@@ -196,10 +178,7 @@
       font-weight: 900;
       z-index: 2;
     }
-    .lb-me{
-      background: rgba(78,204,163,0.20);
-      border-radius: 10px;
-    }
+    .lb-me{ background: rgba(78,204,163,0.20); border-radius: 10px; }
   </style>
 </head>
 
@@ -225,7 +204,6 @@
       <div id="timer-text" class="value">8.0</div>
       <div id="timer-bar"><div id="timer-fill"></div></div>
     </div>
-    <!-- STABILITY 面板已移除 -->
   </div>
 
   <div id="overlay" aria-hidden="true">
@@ -235,31 +213,17 @@
       <p id="ov-sub">正在崩塌中…</p>
 
       <div class="summary" id="ov-summary" style="display:none;">
-        <div class="card">
-          <div class="k">LEVEL</div>
-          <div class="v" id="ov-height">0</div>
-        </div>
-        <div class="card">
-          <div class="k">Score</div>
-          <div class="v" id="ov-score">0</div>
-        </div>
-        <div class="card">
-          <div class="k">Combo</div>
-          <div class="v" id="ov-combo">0</div>
-        </div>
-        <div class="card">
-          <div class="k">Rank</div>
-          <div class="v" id="ov-rank">-</div>
-        </div>
+        <div class="card"><div class="k">LEVEL</div><div class="v" id="ov-height">0</div></div>
+        <div class="card"><div class="k">Score</div><div class="v" id="ov-score">0</div></div>
+        <div class="card"><div class="k">Combo</div><div class="v" id="ov-combo">0</div></div>
+        <div class="card"><div class="k">Rank</div><div class="v" id="ov-rank">-</div></div>
       </div>
 
       <div class="leaderboard" id="lb-wrap" style="display:none;">
         <div class="lb-title">排行榜（本機）</div>
         <div class="lb-sub">排序：LEVEL ＞ 分數 ＞ COMBO</div>
         <div class="lb-scroll" id="lb-scroll" role="region" aria-label="leaderboard">
-          <div class="lb-row lb-head">
-            <div>#</div><div>LEVEL</div><div>Score</div><div>Combo</div>
-          </div>
+          <div class="lb-row lb-head"><div>#</div><div>LEVEL</div><div>Score</div><div>Combo</div></div>
           <div id="lb-list"></div>
         </div>
       </div>
@@ -293,13 +257,7 @@ const viewport = document.getElementById('game-viewport');
 const render = Render.create({
   element: viewport,
   engine,
-  options: {
-    width: viewW,
-    height: viewH,
-    wireframes: false,
-    background: 'transparent',
-    hasBounds: true
-  }
+  options: { width: viewW, height: viewH, wireframes: false, background: 'transparent', hasBounds: true }
 });
 Render.setPixelRatio(render, window.devicePixelRatio || 1);
 
@@ -316,49 +274,63 @@ const ovCombo = document.getElementById('ov-combo');
 const ovRank  = document.getElementById('ov-rank');
 const ovActions = document.getElementById('ov-actions');
 const btnRetry = document.getElementById('btn-retry');
+const timerCard = document.getElementById('timer-card');
 
 /* =========================
    Tunables
 ========================= */
 const ROUND_TIME = 8;
 const MAX_LEVEL = 61;
+const CAMERA_STEP = 1;
 
 const MATERIAL = { restitution:0.02, friction:0.92, frictionStatic:0.98, frictionAir:0.02, density:0.0022 };
 const LANDING_STABILIZE = { frictionAirBoost:0.14, durationMs:70, velXScale:0.06, velYScale:0.45, angScale:0.22 };
 
-/* 落地判定（較寬鬆） */
 const STABILITY = { windowMs:220, maxAngleRad:0.72, maxOmega:2.2, maxYDrop:95, maxXDrift:60 };
-
-/* 倒塌偵測（活動區 + 半封存 避免第11關莫名暴斃） */
-const COLLAPSE  = { holdMs:320, angleRad:1.05, omega:3.0, speed:8.0, xPadding:280, outOfViewPadding:260 };
-
+const COLLAPSE  = { holdMs:320, angleRad:1.05, omega:3.0, speed:8.0, xPadding:280 };
 const FAIL = { outOfViewPadding:220, outOfWorldPadding:600, xPadding:240 };
 const GAMEOVER = { removeGroundMs:350, showSummaryMs:1150 };
 
 /* =========================
-   Block sizing (分段縮放)
+   UI Safe Zone（量測UI底部）
 ========================= */
-const BASE_W = 120;
-const BASE_H = 80;
+let uiBottomPx = 170;
+const UI_SAFE = {
+  topPad: 22,
+  craneMargin: 14
+};
+function measureUiBottom(){
+  const ui = document.getElementById('ui');
+  if(!ui) return;
+  const r = ui.getBoundingClientRect();
+  uiBottomPx = Math.ceil(r.bottom);
+}
+
+/* =========================
+   Block sizing (縮小！)
+========================= */
+/* ✅ 你要的：方塊小一點，不要一顆就佔滿畫面 */
+const BASE_W = 84;
+const BASE_H = 56;
 
 function scaleForLevel(lvl){
   if(lvl <= 10) return 1.0;
-  if(lvl <= 20) return 0.8;
-  if(lvl <= 30) return 0.6;
-  if(lvl <= 40) return 0.4;
-  if(lvl <= 50) return 0.2;
-  if(lvl <= 60) return 0.1;
-  return 0.1;
+  if(lvl <= 20) return 0.82;
+  if(lvl <= 30) return 0.64;
+  if(lvl <= 40) return 0.46;
+  if(lvl <= 50) return 0.28;
+  if(lvl <= 60) return 0.14;
+  return 0.14;
 }
 function sizeForLevel(lvl){
   const s = scaleForLevel(lvl);
-  const w = Math.max(16, BASE_W * s);
-  const h = Math.max(10, BASE_H * s);
+  const w = Math.max(14, BASE_W * s);
+  const h = Math.max(9,  BASE_H * s);
   return { w, h, s };
 }
 
 /* =========================
-   Segment + Half-Seal（修第11關暴斃）
+   ✅ 半封存修11關 + 活動區
 ========================= */
 function segmentIdForLevel(lvl){
   if(lvl <= 10) return 0;
@@ -368,7 +340,6 @@ function segmentIdForLevel(lvl){
   if(lvl <= 50) return 4;
   return 5;
 }
-
 const SEAL = {
   keepTop: 14,
   frictionAir: 0.18,
@@ -378,11 +349,10 @@ const SEAL = {
   perFrameVelScale: 0.985,
   perFrameAngScale: 0.980
 };
-
+const stackedBlocks = [];
 function getActiveBlocks(){
   return stackedBlocks.slice(Math.max(0, stackedBlocks.length - SEAL.keepTop));
 }
-
 function sealOldSegment(){
   const cutoff = Math.max(0, stackedBlocks.length - SEAL.keepTop);
   const now = engine.timing.timestamp;
@@ -400,24 +370,22 @@ function sealOldSegment(){
     Body.setAngularVelocity(b, b.angularVelocity * SEAL.angScale);
   }
 }
-
 function dampSealedBlocks(){
   if(!SEAL.continuousDamp) return;
   const cutoff = Math.max(0, stackedBlocks.length - SEAL.keepTop);
   for(let i=0;i<cutoff;i++){
     const b = stackedBlocks[i];
     if(!b.plugin?.sealed) continue;
-
     Body.setVelocity(b, { x: b.velocity.x * SEAL.perFrameVelScale, y: b.velocity.y * SEAL.perFrameVelScale });
     Body.setAngularVelocity(b, b.angularVelocity * SEAL.perFrameAngScale);
   }
 }
 
 /* =========================
-   Ground
+   Ground（✅ 地板更貼近底部 & 稍薄）
 ========================= */
-let groundY = WORLD_HEIGHT - 100;
-const groundH = 120;
+let groundY = WORLD_HEIGHT - 60;  // ✅ 原本 -100 太高，改 -60
+const groundH = 100;             // ✅ 稍薄，不要吃太多畫面
 let ground = Bodies.rectangle(viewW/2, groundY, viewW, groundH, {
   isStatic: true,
   restitution: 0.0,
@@ -428,75 +396,69 @@ let ground = Bodies.rectangle(viewW/2, groundY, viewW, groundH, {
 World.add(world, ground);
 
 /* =========================
-   ✅ Camera（單向 + 真實塔頂追蹤 + lookAhead）
+   Camera（✅ 加 bottomPad 鉗制，避免地板浮上去）
 ========================= */
 const CAMERA = {
-  smoothUp: 0.22,     // ✅ 追快一點，避免永遠慢半拍
-  uiSafeTop: 170,     // UI 區高度（你可調）
-  topPad: 120,         // ✅ 塔頂到 UI 下方的緩衝（可 60~140）
-  bottomPad: 260,
-  lookAhead: 260      // ✅ 提前看上方（可 160~300）
+  smoothUp: 0.18,
+  bottomPad: 60 // ✅ 越小：地板越貼底；越大：地板越往上
 };
-
-// ✅ 每 4 層才允許相機更新一次
-const CAM_STEP = 4;
-let nextCamTriggerLevel = CAM_STEP;
-
-// 只在觸發時重新計算一次目標（單向：只往上）
-function requestCameraMove(){
-  const dynTarget = computeCameraTargetFromTower();
-  if(dynTarget < cameraTargetY) cameraTargetY = dynTarget;
-}
-
 
 let cameraTargetY = 0;
 let currentScrollY = 0;
+let skyScrollY = 0;
 
-function computeCameraTargetFromTower(){
-  // ✅ 把「會讓畫面變高」的全部都算進來
-  const bodies = [];
-  bodies.push(...stackedBlocks);
-  if(pendingCommit?.body) bodies.push(pendingCommit.body);
-  if(fallingBlock) bodies.push(fallingBlock);
-  if(currentCraneBlock) bodies.push(currentCraneBlock);
+let currentCraneBlock = null;
+let fallingBlock = null;
+let pendingCommit = null;
 
-  if(bodies.length === 0){
-    return Math.max(0, groundY - viewH + CAMERA.bottomPad);
-  }
+let swingTime = 0;
+const craneRadius = 200; // ✅ 擺盪半徑也縮一點，避免早期太擠
+let cranePivotX = 0;
+let cranePivotY = 0;
 
-  // 最高點：bounds.min.y 最小
-  let topY = bodies[0].bounds.min.y;
-  for(const b of bodies){
-    if(b.bounds.min.y < topY) topY = b.bounds.min.y;
-  }
+let state = "running";
+let endReason = "";
+let score = 0, level = 0, combo = 0, timeLeft = ROUND_TIME;
+let inputLock = false;
+let spawnQueued = false;
+let collapseBadMs = 0;
+let lastTimestamp = null;
 
-  // ✅ look-ahead：讓鏡頭提早上抬
-  topY -= CAMERA.lookAhead;
+const particles = [];
+const popups = [];
 
-  const desiredTopOnScreen = CAMERA.uiSafeTop + CAMERA.topPad;
-  let targetY = topY - desiredTopOnScreen;
+function getTowerTopWorldY(){
+  let topY = Infinity;
+  for(const b of stackedBlocks) topY = Math.min(topY, b.bounds.min.y);
+  if(!isFinite(topY)) topY = groundY - 180;
+  return topY;
+}
 
-  // 不要超出世界頂部
-  targetY = Math.max(0, targetY);
+function getTopMostWorldY(){
+  let topY = getTowerTopWorldY();
+  if(currentCraneBlock) topY = Math.min(topY, currentCraneBlock.bounds.min.y);
+  if(fallingBlock) topY = Math.min(topY, fallingBlock.bounds.min.y);
+  if(pendingCommit?.body) topY = Math.min(topY, pendingCommit.body.bounds.min.y);
+  return topY;
+}
+
+function computeCameraTargetFromSafeTop(){
+  measureUiBottom();
+
+  const topMostY = getTopMostWorldY();
+  const desiredTopOnScreen = uiBottomPx + UI_SAFE.topPad + UI_SAFE.craneMargin;
+  let targetY = topMostY - desiredTopOnScreen;
+
+  const minY = Math.max(0, groundY - viewH + CAMERA.bottomPad);
+  const maxY = Math.max(0, WORLD_HEIGHT - viewH);   // ✅ 世界最底能滾到哪
+
+  targetY = Math.max(targetY, minY);
+  targetY = Math.min(targetY, maxY);
 
   return targetY;
 }
 
-function initCamera(){
-  cameraTargetY = computeCameraTargetFromTower();
-  currentScrollY = cameraTargetY;
-  nextCamTriggerLevel = CAM_STEP; // ✅ 重設
-  applyCamera();
-}
 
-
-function updateCamera(){
-  // ✅ 不再每幀算 dynTarget；只追逐「上一個觸發點」算好的 cameraTargetY
-  if(cameraTargetY < currentScrollY){
-    currentScrollY = currentScrollY + (cameraTargetY - currentScrollY) * CAMERA.smoothUp;
-  }
-  applyCamera();
-}
 
 
 function applyCamera(){
@@ -507,31 +469,28 @@ function applyCamera(){
   render.bounds.max.y = y + viewH;
 }
 
-/* =========================
-   Game state
-========================= */
-let state = "running";
-let endReason = "";
+function initCamera(){
+  // ✅ 開局先把相機放在地板附近，保證看得到地板
+  const startY = Math.max(0, groundY - viewH + CAMERA.bottomPad);
 
-let score = 0, level = 0, combo = 0, timeLeft = ROUND_TIME;
-let inputLock = false;
+  cameraTargetY = startY;
+  currentScrollY = startY;
+  skyScrollY = startY;
 
-let currentCraneBlock = null;
-let fallingBlock = null;
-const stackedBlocks = [];
+  applyCamera();
+}
 
-let swingTime = 0;
-const craneRadius = 220;
-let cranePivotX = 0;
-let cranePivotY = 0;
 
-let lastTimestamp = null;
-const particles = [];
-const popups = [];
+function updateCamera(){
+  const safetyTarget = computeCameraTargetFromSafeTop();
+  if(safetyTarget < cameraTargetY) cameraTargetY = safetyTarget; // 單向往上
 
-let pendingCommit = null;
-let spawnQueued = false;
-let collapseBadMs = 0;
+  if(cameraTargetY < currentScrollY){
+    currentScrollY = currentScrollY + (cameraTargetY - currentScrollY) * CAMERA.smoothUp;
+  }
+  skyScrollY = skyScrollY + (currentScrollY - skyScrollY) * 0.08;
+  applyCamera();
+}
 
 /* =========================
    Background smooth
@@ -581,13 +540,9 @@ function updateTimerUI(){
   document.getElementById('timer-text').innerText = t.toFixed(1);
   document.getElementById('timer-fill').style.width = (t / ROUND_TIME * 100) + "%";
 
-  const timerCard = document.getElementById('timer-card');
   if(timerCard){
-    if(state === "running" && level > 0 && t <= 3.0 && t > 0){
-      timerCard.classList.add('time-warn');
-    }else{
-      timerCard.classList.remove('time-warn');
-    }
+    if(state === "running" && level > 0 && t <= 3.0 && t > 0) timerCard.classList.add('time-warn');
+    else timerCard.classList.remove('time-warn');
   }
 }
 function showOverlayCollapsing(reasonText){
@@ -613,6 +568,9 @@ function showOverlaySummary(rankText){
 
   ovSummary.style.display = "grid";
   ovActions.style.display = "flex";
+  btnRetry.style.pointerEvents = "auto";
+  ovActions.style.pointerEvents = "auto";
+
 }
 
 /* =========================
@@ -648,11 +606,36 @@ function spawnBlock(){
   if(spawnQueued) return;
   if(inputLock) return;
 
+  measureUiBottom();
+
   const nextLvl = level + 1;
   const { w, h } = sizeForLevel(nextLvl);
 
-  const highestY = stackedBlocks.length>0 ? stackedBlocks[stackedBlocks.length-1].position.y : groundY-60;
-  const spawnY = highestY - 240;
+  const towerTopY = getTowerTopWorldY(); // 最上緣（越小越高）
+  const GAP_ABOVE_TOWER = Math.max(260, craneRadius * 0.70 + h * 0.90);
+  let spawnY = towerTopY - GAP_ABOVE_TOWER;
+
+  const safeTopWorldY = currentScrollY + (uiBottomPx + UI_SAFE.topPad);
+  const needMinSpawnY = safeTopWorldY + UI_SAFE.craneMargin + (h/2) + (0.293 * craneRadius);
+
+  const extraClear = (level >= 5) ? 80 : 0;   // 第 6 層起多留 80px
+  const MIN_ABOVE_TOWER = 180 + extraClear;
+  const MAX_ABOVE_TOWER = 520 + extraClear;
+
+  spawnY = Math.min(spawnY, towerTopY - MIN_ABOVE_TOWER); // 不要太低
+  spawnY = Math.max(spawnY, towerTopY - MAX_ABOVE_TOWER); // 不要太高
+  // ✅ 如果鐘擺太靠近 UI safe，就推相機往上，而不是把鐘擺往下壓
+  if (spawnY < needMinSpawnY) {
+    const desiredTopOnScreen = uiBottomPx + UI_SAFE.topPad + UI_SAFE.craneMargin;
+    const camNeed = spawnY - desiredTopOnScreen;
+    cameraTargetY = Math.min(cameraTargetY, Math.max(0, camNeed));
+  }
+// ⚠️ 不要再用 spawnY = Math.max(spawnY, needMinSpawnY);
+
+
+  const MIN_CLEAR_FROM_GROUND = 280;
+  spawnY = Math.min(spawnY, groundY - MIN_CLEAR_FROM_GROUND);
+
 
   const hue = (level * 28 + Math.random()*12) % 360;
   const baseColor = `hsl(${hue}, 72%, 62%)`;
@@ -676,6 +659,7 @@ function spawnBlock(){
   cranePivotY = spawnY - craneRadius;
 
   World.add(world,currentCraneBlock);
+  cameraTargetY = Math.min(cameraTargetY, computeCameraTargetFromSafeTop());
 }
 
 function drop(){
@@ -709,21 +693,17 @@ function stabilizeOnLanding(body){
   });
   Body.setAngularVelocity(body, body.angularVelocity * LANDING_STABILIZE.angScale);
 
-  setTimeout(()=>{
-    if(state!=="running") return;
-    body.frictionAir=prevAir;
-  }, LANDING_STABILIZE.durationMs);
+  setTimeout(()=>{ if(state==="running") body.frictionAir=prevAir; }, LANDING_STABILIZE.durationMs);
 }
 
-function beginPendingCommit(body){
-  const base = stackedBlocks.length>0 ? stackedBlocks[stackedBlocks.length-1] : ground;
+function beginPendingCommit(body, landedOn){
+  // landedOn 可能是 ground 或某個 block
+  const base = landedOn || (stackedBlocks.length>0 ? stackedBlocks[stackedBlocks.length-1] : ground);
+
   const diff = Math.abs(body.position.x - base.position.x);
   const w = (body.bounds.max.x - body.bounds.min.x);
 
-  if(diff > w*0.85){
-    startGameOver("房子傾倒了！");
-    return;
-  }
+  if(diff > w*0.85){ startGameOver("房子傾倒了！"); return; }
 
   const isFirstLanding = (level === 0);
   if(!isFirstLanding){
@@ -731,10 +711,10 @@ function beginPendingCommit(body){
     if(perfect){
       const nextCombo = combo + 1;
       const text = (nextCombo >= 2) ? `${nextCombo} COMBO!` : "PERFECT!";
-      addPopup("combo", text, body.position.x, body.position.y-66);
+      addPopup("combo", text, body.position.x, body.position.y-56);
       spawnParticles(body.position.x, body.position.y, (nextCombo>=2) ? 30 : 22);
     }else{
-      addPopup("nice","NICE", body.position.x, body.position.y-66);
+      addPopup("nice","NICE", body.position.x, body.position.y-56);
       spawnParticles(body.position.x, body.position.y, 16);
     }
   }
@@ -743,7 +723,7 @@ function beginPendingCommit(body){
 
   pendingCommit = {
     body,
-    base,
+    base,              // ✅ 記住落點 base
     startTs: engine.timing.timestamp,
     startX: body.position.x,
     startY: body.position.y,
@@ -753,6 +733,7 @@ function beginPendingCommit(body){
 
   fallingBlock = null;
 }
+
 
 function updatePendingCommit(nowTs){
   if(!pendingCommit || state!=="running") return;
@@ -788,10 +769,7 @@ function winGame(){
   spawnQueued = false;
   fallingBlock = null;
   pendingCommit = null;
-  if(currentCraneBlock){
-    World.remove(world, currentCraneBlock);
-    currentCraneBlock = null;
-  }
+  if(currentCraneBlock){ World.remove(world, currentCraneBlock); currentCraneBlock = null; }
 
   const myId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
   const arr = addToLB({ id: myId, level, score, combo, ts: Date.now() });
@@ -803,7 +781,18 @@ function winGame(){
 function commitSuccess(){
   if(!pendingCommit || state!=="running") return;
 
-  const { body, diff, w } = pendingCommit;
+  const { body, diff, w, base } = pendingCommit;
+
+  // ✅ 核心：把成功落地的方塊“卡”到 base 的頂面，避免同高度疊放
+  if(base){
+    const h = (body.bounds.max.y - body.bounds.min.y);
+    const targetY = base.bounds.min.y - h/2;
+
+    // 只做 y 對齊（x 保留玩家操作結果），並把角速度收斂一下
+    Body.setPosition(body, { x: body.position.x, y: targetY });
+    Body.setVelocity(body, { x: body.velocity.x * 0.25, y: 0 });
+    Body.setAngularVelocity(body, body.angularVelocity * 0.25);
+  }
   const isFirstLanding = (level === 0);
 
   const segPrev = segmentIdForLevel(level);
@@ -820,13 +809,8 @@ function commitSuccess(){
 
   if(!isFirstLanding){
     const perfect = diff < w*0.05;
-    if(perfect){
-      combo++;
-      score += 10 + (combo*25);
-    }else{
-      combo = 0;
-      score += 10;
-    }
+    if(perfect){ combo++; score += 10 + (combo*25); }
+    else { combo = 0; score += 10; }
     const now=engine.timing.timestamp;
     body.plugin = body.plugin || {};
     body.plugin.glowUntil = now + (perfect ? 520 : 320);
@@ -834,23 +818,19 @@ function commitSuccess(){
     combo = 0;
   }
 
-  // 落地後保護期：防止剛放上就被硬判壞
   const now = engine.timing.timestamp;
   body.plugin = body.plugin || {};
   body.plugin.stableUntil = now + 420;
 
   stackedBlocks.push(body);
 
-  // ✅ 每 4 層才更新一次相機目標
-  if(level >= nextCamTriggerLevel){
-    requestCameraMove();
-    nextCamTriggerLevel += CAM_STEP;
-  }
+  if(segNow !== segPrev) sealOldSegment();
 
+  const CAMERA_START_LEVEL = 3;
 
-  // 段落切換：半封存舊段落（修第11關暴斃）
-  if(segNow !== segPrev){
-    sealOldSegment();
+  if(level >= CAMERA_START_LEVEL){
+    const stepTarget = computeCameraTargetFromSafeTop();
+    if(stepTarget < cameraTargetY) cameraTargetY = stepTarget;
   }
 
   timeLeft = ROUND_TIME;
@@ -881,22 +861,18 @@ Events.on(engine,'collisionStart',(event)=>{
 
     const other = (pair.bodyA===fallingBlock) ? pair.bodyB : pair.bodyA;
 
-    if(other === ground){
-      if(level > 0){
-        startGameOver("掉到地板！");
-        return;
-      }
-      beginPendingCommit(fallingBlock);
-      return;
-    }
-
-    beginPendingCommit(fallingBlock);
+  if(other === ground){
+    if(level > 0){ startGameOver("掉到地板！"); return; }
+    beginPendingCommit(fallingBlock, ground);
     return;
+  }
+  beginPendingCommit(fallingBlock, other);
+  return;
   }
 });
 
 /* =========================
-   Collapse detector（活動區 + 不用相機視野 y 判死）
+   Collapse detector
 ========================= */
 function updateCollapseDetector(dt){
   if(state!=="running") return;
@@ -904,10 +880,8 @@ function updateCollapseDetector(dt){
 
   let bad = false;
   const now = engine.timing.timestamp;
-
   const active = getActiveBlocks();
 
-  // 1) 明確散掉：左右越界、或掉到世界外
   for(const b of active){
     const stableUntil = b.plugin?.stableUntil || 0;
     if(now < stableUntil) continue;
@@ -920,7 +894,6 @@ function updateCollapseDetector(dt){
     }
   }
 
-  // 2) 動態指標：只對活動區中「未封存」做硬判
   if(!bad){
     for(const b of active){
       const stableUntil = b.plugin?.stableUntil || 0;
@@ -937,7 +910,6 @@ function updateCollapseDetector(dt){
     }
   }
 
-  // holdMs 累積（落下/判定中放寬）
   if(pendingCommit || fallingBlock){
     if(bad) collapseBadMs += dt*1000 * 0.55;
     else collapseBadMs = Math.max(0, collapseBadMs - dt*1000 * 0.7);
@@ -946,9 +918,7 @@ function updateCollapseDetector(dt){
     else collapseBadMs = Math.max(0, collapseBadMs - dt*1000 * 0.9);
   }
 
-  if(collapseBadMs >= COLLAPSE.holdMs){
-    startGameOver("建築倒塌！");
-  }
+  if(collapseBadMs >= COLLAPSE.holdMs) startGameOver("建築倒塌！");
 }
 
 /* =========================
@@ -965,10 +935,7 @@ function startGameOver(reason){
   fallingBlock = null;
   pendingCommit = null;
 
-  if(currentCraneBlock){
-    World.remove(world,currentCraneBlock);
-    currentCraneBlock=null;
-  }
+  if(currentCraneBlock){ World.remove(world,currentCraneBlock); currentCraneBlock=null; }
 
   showOverlayCollapsing(reason);
 
@@ -983,20 +950,13 @@ function startGameOver(reason){
     Body.setAngularVelocity(b, b.angularVelocity + dir*(0.02+0.06*t));
   }
 
-  setTimeout(()=>{
-    if(ground){
-      World.remove(world,ground);
-      ground=null;
-    }
-  }, GAMEOVER.removeGroundMs);
+  setTimeout(()=>{ if(ground){ World.remove(world,ground); ground=null; } }, GAMEOVER.removeGroundMs);
 
   setTimeout(()=>{
     state="ended";
-
     const myId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
     const arr = addToLB({ id: myId, level, score, combo, ts: Date.now() });
     const rank = arr.findIndex(x=>x.id===myId) + 1;
-
     renderLB(arr, myId);
     showOverlaySummary(String(rank));
   }, GAMEOVER.showSummaryMs);
@@ -1016,10 +976,8 @@ Events.on(engine,'beforeUpdate',()=>{
 
   if(state!=="running") return;
 
-  // 半封存：每幀微收斂（更穩）
   dampSealedBlocks();
 
-  // 起重機左右擺
   if(currentCraneBlock){
     const speed=0.03+(level*0.003);
     swingTime+=speed;
@@ -1032,17 +990,12 @@ Events.on(engine,'beforeUpdate',()=>{
     Body.setAngularVelocity(currentCraneBlock,0);
   }
 
-  // 倒數計時
   if(level>0){
     timeLeft-=dt;
     updateTimerUI();
-    if(timeLeft<=0){
-      startGameOver("時間耗盡！");
-      return;
-    }
+    if(timeLeft<=0){ startGameOver("時間耗盡！"); return; }
   }
 
-  // 下落越界
   if(fallingBlock){
     const b=fallingBlock;
     if(b.position.y>currentScrollY+viewH+FAIL.outOfViewPadding){ startGameOver("建築掉落！"); return; }
@@ -1140,7 +1093,7 @@ function shadeHsl(hsl, dl){
 }
 
 /* =========================
-   Sky decor
+   Sky decor（用 skyScrollY）
 ========================= */
 function seededRand(seed){
   let x = Math.sin(seed) * 10000;
@@ -1204,7 +1157,7 @@ function drawPlanet(ctx, x, y, r){
   ctx.restore();
 }
 function drawSkyDecor(ctx){
-  const cam = currentScrollY;
+  const cam = skyScrollY;
   const par1 = cam * 0.25;
   const par2 = cam * 0.12;
 
@@ -1221,7 +1174,7 @@ function drawSkyDecor(ctx){
       const rx = seededRand(seed) * viewW;
       const ry = 80 + seededRand(seed+9) * 180;
       const s = 0.7 + seededRand(seed+3)*0.9;
-      const y = ry + (par2 % 4000) * 0.25;
+      const y = ry + (par2 % 240) * 0.25;
       drawCloud(ctx, rx, y, s, 0.55);
     }
   }
@@ -1234,7 +1187,7 @@ function drawSkyDecor(ctx){
       const seed = 5000 + i*31;
       const x = seededRand(seed) * viewW;
       const baseY = 40 + seededRand(seed+5) * 280;
-      const y = baseY + par1 * 0.08;
+      const y = baseY + (par1 % 360) * 0.08;
       const r = 3 + seededRand(seed+8)*3.5;
       const a = 0.25 + seededRand(seed+11)*0.55;
       drawStar(ctx, x, y, r, a);
@@ -1244,7 +1197,7 @@ function drawSkyDecor(ctx){
 }
 
 /* =========================
-   Render (world -> screen)
+   Render
 ========================= */
 Events.on(render,'afterRender',()=>{
   const ctx = render.context;
@@ -1255,7 +1208,6 @@ Events.on(render,'afterRender',()=>{
 
   drawSkyDecor(ctx);
 
-  // ground
   if(ground){
     const gy = toScreenY(groundY - groundH/2);
     ctx.save();
@@ -1281,9 +1233,9 @@ Events.on(render,'afterRender',()=>{
     const top = shadeHsl(baseColor, +14);
     const side = shadeHsl(baseColor, -14);
 
-    const dx = Math.max(4, 10 * (h/BASE_H));
-    const dy = -Math.max(3, 8 * (h/BASE_H));
-    const r  = Math.max(2, 8 * (h/BASE_H));
+    const dx = Math.max(3, 9 * (h/BASE_H));
+    const dy = -Math.max(2, 7 * (h/BASE_H));
+    const r  = Math.max(2, 7 * (h/BASE_H));
 
     ctx.save();
     ctx.translate(b.position.x, toScreenY(b.position.y));
@@ -1297,7 +1249,6 @@ Events.on(render,'afterRender',()=>{
       ctx.shadowBlur=0;
     }
 
-    // top
     ctx.fillStyle = top;
     drawRoundedQuad(ctx, [
       {x:-w/2,      y:-h/2},
@@ -1306,7 +1257,6 @@ Events.on(render,'afterRender',()=>{
       {x: w/2,      y:-h/2}
     ], r);
 
-    // side
     ctx.fillStyle = side;
     drawRoundedQuad(ctx, [
       {x: w/2,      y:-h/2},
@@ -1315,14 +1265,12 @@ Events.on(render,'afterRender',()=>{
       {x: w/2,      y: h/2}
     ], r);
 
-    // front
     ctx.fillStyle = front;
     ctx.beginPath();
-    if(typeof ctx.roundRect==="function") ctx.roundRect(-w/2, -h/2, w, h, Math.max(3, 12*(h/BASE_H)));
+    if(typeof ctx.roundRect==="function") ctx.roundRect(-w/2, -h/2, w, h, Math.max(3, 10*(h/BASE_H)));
     else ctx.rect(-w/2, -h/2, w, h);
     ctx.fill();
 
-    // roof
     ctx.shadowBlur = 0;
     ctx.fillStyle = "rgba(255,255,255,0.18)";
     ctx.beginPath();
@@ -1332,12 +1280,11 @@ Events.on(render,'afterRender',()=>{
     ctx.closePath();
     ctx.fill();
 
-    // windows
     const win = "rgba(255,255,255,0.28)";
     const winHi = "rgba(255,255,255,0.16)";
     const rows = [-h*0.15, h*0.18];
-    const ww = Math.max(3, 12*(h/BASE_H));
-    const wh = Math.max(4, 16*(h/BASE_H));
+    const ww = Math.max(3, 10*(h/BASE_H));
+    const wh = Math.max(4, 12*(h/BASE_H));
     for(const rowY of rows){
       for(let i=-1;i<=1;i++){
         const wx = i*(w/4) - ww*0.5;
@@ -1352,14 +1299,13 @@ Events.on(render,'afterRender',()=>{
     ctx.restore();
   }
 
-  // particles
   ctx.save();
   ctx.globalCompositeOperation="lighter";
   for(const p of particles){
     const alpha=Math.max(0,Math.min(1,p.life/0.85));
     ctx.globalAlpha=alpha;
     ctx.beginPath();
-    ctx.arc(p.x, toScreenY(p.y), 2.2, 0, Math.PI*2);
+    ctx.arc(p.x, toScreenY(p.y), 2.0, 0, Math.PI*2);
     ctx.fillStyle="rgba(255, 209, 102, 1)";
     ctx.fill();
   }
@@ -1367,7 +1313,6 @@ Events.on(render,'afterRender',()=>{
   ctx.globalAlpha=1;
   ctx.globalCompositeOperation="source-over";
 
-  // popups
   ctx.save();
   ctx.textAlign="center";
   ctx.textBaseline="middle";
@@ -1377,7 +1322,7 @@ Events.on(render,'afterRender',()=>{
     const a=popupAlpha(t01);
     const isComboKind=(m.kind==="combo"||m.kind==="perfect");
     const color=isComboKind?"rgba(255,209,102,1)":"rgba(255,255,255,1)";
-    const baseSize=isComboKind?32:22;
+    const baseSize=isComboKind?30:20;
     const size=Math.round(baseSize*s);
 
     ctx.globalAlpha=a;
@@ -1435,12 +1380,7 @@ function renderLB(arr, highlightId){
   top.forEach((it, idx)=>{
     const row = document.createElement('div');
     row.className = "lb-row" + (it.id === highlightId ? " lb-me" : "");
-    row.innerHTML = `
-      <div>${idx+1}</div>
-      <div>${it.level}</div>
-      <div>${it.score}</div>
-      <div>${it.combo}</div>
-    `;
+    row.innerHTML = `<div>${idx+1}</div><div>${it.level}</div><div>${it.score}</div><div>${it.combo}</div>`;
     list.appendChild(row);
   });
 
@@ -1454,12 +1394,7 @@ function renderLB(arr, highlightId){
     const it = arr[myIndex];
     const row = document.createElement('div');
     row.className = "lb-row lb-me";
-    row.innerHTML = `
-      <div>${myIndex+1}</div>
-      <div>${it.level}</div>
-      <div>${it.score}</div>
-      <div>${it.combo}</div>
-    `;
+    row.innerHTML = `<div>${myIndex+1}</div><div>${it.level}</div><div>${it.score}</div><div>${it.combo}</div>`;
     list.appendChild(row);
   }
 }
@@ -1480,7 +1415,7 @@ window.addEventListener('touchstart', (e)=>{ e.preventDefault(); drop(); }, { pa
 
 function rebuildGround(){
   if(ground) World.remove(world, ground);
-  groundY = WORLD_HEIGHT - 100;
+  groundY = WORLD_HEIGHT - 60;
   ground = Bodies.rectangle(viewW/2, groundY, viewW, groundH, {
     isStatic: true,
     restitution: 0.0,
@@ -1500,11 +1435,13 @@ window.addEventListener('resize', ()=>{
   Render.setPixelRatio(render, window.devicePixelRatio || 1);
 
   rebuildGround();
+  measureUiBottom();
 
-  // 重新以當前塔狀態校正一次（仍保持單向）
-  requestCameraMove();
-  currentScrollY = Math.min(currentScrollY, cameraTargetY);
+  const t = computeCameraTargetFromSafeTop();
+  cameraTargetY = Math.min(cameraTargetY, t);
+  currentScrollY = Math.min(currentScrollY, cameraTargetY); // 這行先留著也行
   applyCamera();
+
 });
 
 /* =========================
@@ -1513,6 +1450,7 @@ window.addEventListener('resize', ()=>{
 Render.run(render);
 Runner.run(Runner.create(), engine);
 
+measureUiBottom();
 timeLeft = ROUND_TIME;
 updateTimerUI();
 updateUI();
@@ -1523,4 +1461,3 @@ spawnBlock();
 </script>
 </body>
 </html>
-
