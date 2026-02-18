@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>星際建築師</title>
+  <title>星際建築師 - 單向相機/分段縮放/61破關/時間警示/修正第11關暴斃</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
   <style>
     body{
@@ -22,12 +22,22 @@
       z-index:10;
       pointer-events:none;
       color:white;
-      width: min(520px, 92vw);
+
+      /* ✅ 永遠不爆版（修 TIME 右邊超出） */
+      width: min(520px, calc(100vw - 24px));
+      box-sizing: border-box;
+      padding: 0 2px;
+
       display:flex;
       flex-direction:column;
       gap:10px;
     }
-    #hud-top{ display:flex; gap:10px; }
+    #hud-top{
+      display:flex;
+      gap:10px;
+      width: 100%;
+      box-sizing: border-box;
+    }
     .stat-card{
       flex: 1;
       background: rgba(0,0,0,0.28);
@@ -36,6 +46,7 @@
       border: 2px solid rgba(78,204,163,0.55);
       backdrop-filter: blur(10px);
       min-width: 0;
+      box-sizing: border-box;
     }
     .label{
       font-size: 11px;
@@ -50,6 +61,7 @@
       text-shadow: 0 6px 18px rgba(0,0,0,0.25);
     }
     #timer-card{ width: 100%; }
+
     #timer-bar{
       width:100%;
       height:6px;
@@ -59,6 +71,17 @@
       overflow:hidden;
     }
     #timer-fill{ width:100%; height:100%; background:#ff416c; }
+
+    /* ✅ 3 秒內紅色淡入淡出（35%） */
+    @keyframes timeWarnPulse {
+      0%   { background: rgba(255, 65, 108, 0.00); }
+      50%  { background: rgba(255, 65, 108, 0.35); }
+      100% { background: rgba(255, 65, 108, 0.00); }
+    }
+    #timer-card.time-warn{
+      animation: timeWarnPulse 0.9s ease-in-out infinite;
+      border-color: rgba(255, 65, 108, 0.55);
+    }
 
     #game-viewport{ width:100vw; height:100vh; }
     canvas{ display:block; }
@@ -102,6 +125,7 @@
       line-height: 1.35;
       font-size: 16px;
     }
+
     .summary{
       margin-top: 10px;
       display:grid;
@@ -126,6 +150,7 @@
       cursor:pointer;
       background: #4ecca3;
       color: #0b1a14;
+      pointer-events:auto;
     }
     button:active{ transform: scale(0.98); }
 
@@ -148,14 +173,14 @@
       margin-bottom: 8px;
     }
     .lb-scroll{
-      max-height: 240px;
+      max-height: 260px;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
       padding-right: 6px;
     }
     .lb-row{
       display:grid;
-      grid-template-columns: 36px 72px 90px 80px 1fr;
+      grid-template-columns: 42px 86px 110px 90px;
       gap: 8px;
       align-items:center;
       padding: 8px 6px;
@@ -201,6 +226,8 @@
       <div id="timer-text" class="value">8.0</div>
       <div id="timer-bar"><div id="timer-fill"></div></div>
     </div>
+
+    <!-- ✅ STABILITY 面板維持移除 -->
   </div>
 
   <div id="overlay" aria-hidden="true">
@@ -211,12 +238,20 @@
 
       <div class="summary" id="ov-summary" style="display:none;">
         <div class="card">
-          <div class="k">Final Height</div>
+          <div class="k">LEVEL</div>
           <div class="v" id="ov-height">0</div>
         </div>
         <div class="card">
-          <div class="k">Final Score</div>
+          <div class="k">Score</div>
           <div class="v" id="ov-score">0</div>
+        </div>
+        <div class="card">
+          <div class="k">Combo</div>
+          <div class="v" id="ov-combo">0</div>
+        </div>
+        <div class="card">
+          <div class="k">Rank</div>
+          <div class="v" id="ov-rank">-</div>
         </div>
       </div>
 
@@ -225,7 +260,7 @@
         <div class="lb-sub">排序：LEVEL ＞ 分數 ＞ COMBO</div>
         <div class="lb-scroll" id="lb-scroll" role="region" aria-label="leaderboard">
           <div class="lb-row lb-head">
-            <div>#</div><div>LEVEL</div><div>Score</div><div>Combo</div><div>Time</div>
+            <div>#</div><div>LEVEL</div><div>Score</div><div>Combo</div>
           </div>
           <div id="lb-list"></div>
         </div>
@@ -242,7 +277,9 @@
 <script>
 const { Engine, Render, Runner, World, Bodies, Body, Events } = Matter;
 
-// Engine
+/* =========================
+   Engine / Render
+========================= */
 const engine = Engine.create();
 const world = engine.world;
 engine.positionIterations = 10;
@@ -250,15 +287,9 @@ engine.velocityIterations = 8;
 engine.constraintIterations = 4;
 world.gravity.y = 1;
 
-// View / Render
 let viewW = window.innerWidth;
 let viewH = window.innerHeight;
-
-// 世界高度（物理用）可以很高；canvas 不要很高
 let WORLD_HEIGHT = viewH * 60;
-
-// 房子高度至少一倍
-const BLOCK_H = 80;
 
 const viewport = document.getElementById('game-viewport');
 const render = Render.create({
@@ -274,45 +305,122 @@ const render = Render.create({
 });
 Render.setPixelRatio(render, window.devicePixelRatio || 1);
 
-// UI refs
+/* =========================
+   UI refs
+========================= */
 const overlay = document.getElementById('overlay');
 const ovTitle = document.getElementById('ov-title');
 const ovSub = document.getElementById('ov-sub');
 const ovSummary = document.getElementById('ov-summary');
 const ovHeight = document.getElementById('ov-height');
 const ovScore = document.getElementById('ov-score');
+const ovCombo = document.getElementById('ov-combo');
+const ovRank  = document.getElementById('ov-rank');
 const ovActions = document.getElementById('ov-actions');
 const btnRetry = document.getElementById('btn-retry');
 
-// Tunables
+/* =========================
+   Tunables
+========================= */
 const ROUND_TIME = 8;
+const MAX_LEVEL = 61;
 
 const MATERIAL = { restitution:0.02, friction:0.92, frictionStatic:0.98, frictionAir:0.02, density:0.0022 };
 const LANDING_STABILIZE = { frictionAirBoost:0.14, durationMs:70, velXScale:0.06, velYScale:0.45, angScale:0.22 };
 
-// 放寬穩定判定
-const STABILITY = {
-  windowMs: 220,
-  maxAngleRad: 0.72,
-  maxOmega: 2.2,
-  maxYDrop: 95,
-  maxXDrift: 60
-};
+/* 落地判定（保留你目前較寬鬆） */
+const STABILITY = { windowMs:220, maxAngleRad:0.72, maxOmega:2.2, maxYDrop:95, maxXDrift:60 };
 
-// 倒塌偵測：放寬 + 延長
-const COLLAPSE = {
-  holdMs: 320,
-  angleRad: 1.05,
-  omega: 3.0,
-  speed: 8.0,
-  xPadding: 280,
-  outOfViewPadding: 260
-};
+/* 倒塌偵測（第11關會用「半封存 + 活動區」避免莫名暴斃） */
+const COLLAPSE  = { holdMs:320, angleRad:1.05, omega:3.0, speed:8.0, xPadding:280, outOfViewPadding:260 };
 
 const FAIL = { outOfViewPadding:220, outOfWorldPadding:600, xPadding:240 };
 const GAMEOVER = { removeGroundMs:350, showSummaryMs:1150 };
 
-// Ground
+/* =========================
+   Block sizing (分段縮放)
+========================= */
+const BASE_W = 120;
+const BASE_H = 80;
+
+function scaleForLevel(lvl){
+  if(lvl <= 10) return 1.0;
+  if(lvl <= 20) return 0.8;
+  if(lvl <= 30) return 0.6;
+  if(lvl <= 40) return 0.4;
+  if(lvl <= 50) return 0.2;
+  if(lvl <= 60) return 0.1;
+  return 0.1;
+}
+function sizeForLevel(lvl){
+  const s = scaleForLevel(lvl);
+  const w = Math.max(16, BASE_W * s);
+  const h = Math.max(10, BASE_H * s);
+  return { w, h, s };
+}
+
+/* =========================
+   ✅ 只針對「第11層暴斃」加入：半封存舊段落 + 活動區判定
+   （來自你提供的穩定版做法）
+========================= */
+function segmentIdForLevel(lvl){
+  if(lvl <= 10) return 0;
+  if(lvl <= 20) return 1;
+  if(lvl <= 30) return 2;
+  if(lvl <= 40) return 3;
+  if(lvl <= 50) return 4;
+  return 5;
+}
+
+const SEAL = {
+  keepTop: 14,              // 活動區：只讓上面 N 顆參與倒塌硬判
+  frictionAir: 0.18,        // 半封存：強阻尼（但不是靜態）
+  velScale: 0.25,           // 封存瞬間收斂
+  angScale: 0.20,
+  continuousDamp: true,     // 每幀微阻尼（看起來不會突然變石頭）
+  perFrameVelScale: 0.985,
+  perFrameAngScale: 0.980
+};
+
+function getActiveBlocks(stackedBlocks){
+  return stackedBlocks.slice(Math.max(0, stackedBlocks.length - SEAL.keepTop));
+}
+
+function sealOldSegment(stackedBlocks){
+  const cutoff = Math.max(0, stackedBlocks.length - SEAL.keepTop);
+  const now = engine.timing.timestamp;
+
+  for(let i=0;i<cutoff;i++){
+    const b = stackedBlocks[i];
+    b.plugin = b.plugin || {};
+    if(b.plugin.sealed) continue;
+
+    b.plugin.sealed = true;
+    b.plugin.sealedAt = now;
+
+    b.frictionAir = Math.max(b.frictionAir, SEAL.frictionAir);
+
+    Body.setVelocity(b, { x: b.velocity.x * SEAL.velScale, y: b.velocity.y * SEAL.velScale });
+    Body.setAngularVelocity(b, b.angularVelocity * SEAL.angScale);
+  }
+}
+
+function dampSealedBlocks(stackedBlocks){
+  if(!SEAL.continuousDamp) return;
+  const cutoff = Math.max(0, stackedBlocks.length - SEAL.keepTop);
+
+  for(let i=0;i<cutoff;i++){
+    const b = stackedBlocks[i];
+    if(!b.plugin?.sealed) continue;
+
+    Body.setVelocity(b, { x: b.velocity.x * SEAL.perFrameVelScale, y: b.velocity.y * SEAL.perFrameVelScale });
+    Body.setAngularVelocity(b, b.angularVelocity * SEAL.perFrameAngScale);
+  }
+}
+
+/* =========================
+   Ground
+========================= */
 let groundY = WORLD_HEIGHT - 100;
 const groundH = 120;
 let ground = Bodies.rectangle(viewW/2, groundY, viewW, groundH, {
@@ -324,8 +432,33 @@ let ground = Bodies.rectangle(viewW/2, groundY, viewW, groundH, {
 });
 World.add(world, ground);
 
-// Camera bounds
-let currentScrollY = Math.max(0, groundY - viewH + 160);
+/* =========================
+   Camera (單向、只跟層數上升)
+========================= */
+const CAMERA = { baseBottomPad: 260, smoothUp: 0.18 };
+let cameraTargetY = 0;
+let currentScrollY = 0;
+
+function riseForLevel(lvl){
+  const { h } = sizeForLevel(lvl);
+  return Math.max(8, h * 0.72);
+}
+function computeCameraTargetFromLevel(lvl){
+  let y = Math.max(0, groundY - viewH + CAMERA.baseBottomPad);
+  for(let i=1;i<=lvl;i++) y -= riseForLevel(i);
+  return Math.max(0, y);
+}
+function initCamera(){
+  cameraTargetY = computeCameraTargetFromLevel(level);
+  currentScrollY = cameraTargetY;
+  applyCamera();
+}
+function updateCamera(){
+  if(cameraTargetY < currentScrollY){
+    currentScrollY = currentScrollY + (cameraTargetY - currentScrollY) * CAMERA.smoothUp;
+  }
+  applyCamera();
+}
 function applyCamera(){
   const y = Math.max(0, Math.min(WORLD_HEIGHT - viewH, currentScrollY));
   render.bounds.min.x = 0;
@@ -333,9 +466,10 @@ function applyCamera(){
   render.bounds.min.y = y;
   render.bounds.max.y = y + viewH;
 }
-applyCamera();
 
-// Game state
+/* =========================
+   Game state
+========================= */
 let state = "running";
 let endReason = "";
 
@@ -359,10 +493,46 @@ const popups = [];
 let pendingCommit = null;
 let spawnQueued = false;
 
-// collapse detector state
 let collapseBadMs = 0;
 
-// UI helpers
+/* =========================
+   Background smooth
+========================= */
+function lerp(a,b,t){ return a + (b-a)*t; }
+function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+function hexToRgb(hex){
+  const h = hex.replace('#','');
+  const n = parseInt(h.length===3 ? h.split('').map(c=>c+c).join('') : h, 16);
+  return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 };
+}
+function rgbToCss({r,g,b}){ return `rgb(${r|0},${g|0},${b|0})`; }
+function mix(c1,c2,t){
+  const a = hexToRgb(c1), b = hexToRgb(c2);
+  return rgbToCss({ r:lerp(a.r,b.r,t), g:lerp(a.g,b.g,t), b:lerp(a.b,b.b,t) });
+}
+const BG_STOPS = [
+  { lvl: 0,  top:"#87CEEB", bottom:"#cfefff" },
+  { lvl: 8,  top:"#6fc3ff", bottom:"#c8f0ff" },
+  { lvl: 16, top:"#2f7be6", bottom:"#90d6ff" },
+  { lvl: 24, top:"#1a1a2e", bottom:"#15406f" },
+  { lvl: 32, top:"#0c0c18", bottom:"#0e2a45" },
+  { lvl: 40, top:"#050505", bottom:"#0b1a2e" }
+];
+function setBackgroundForLevelSmooth(lvl){
+  let i = 0;
+  while(i < BG_STOPS.length-1 && lvl > BG_STOPS[i+1].lvl) i++;
+  const a = BG_STOPS[i];
+  const b = BG_STOPS[Math.min(i+1, BG_STOPS.length-1)];
+  const span = Math.max(1, b.lvl - a.lvl);
+  const t = clamp01((lvl - a.lvl) / span);
+  const top = mix(a.top, b.top, t);
+  const bot = mix(a.bottom, b.bottom, t);
+  document.body.style.background = `linear-gradient(${top}, ${bot})`;
+}
+
+/* =========================
+   UI helpers
+========================= */
 function updateUI(){
   document.getElementById('score').innerText = score;
   document.getElementById('level').innerText = level;
@@ -372,14 +542,15 @@ function updateTimerUI(){
   const t = Math.max(0, timeLeft);
   document.getElementById('timer-text').innerText = t.toFixed(1);
   document.getElementById('timer-fill').style.width = (t / ROUND_TIME * 100) + "%";
-}
-function setBackgroundForLevel(lvl){
-  let bg = "linear-gradient(#87CEEB, #cfefff)";
-  if(lvl >= 5)  bg = "linear-gradient(#5fb8ff, #bfe8ff)";
-  if(lvl >= 10) bg = "linear-gradient(#1e3c72, #6bb6ff)";
-  if(lvl >= 15) bg = "linear-gradient(#1a1a2e, #0d2b5c)";
-  if(lvl >= 20) bg = "linear-gradient(#050505, #0b1a2e)";
-  document.body.style.background = bg;
+
+  const timerCard = document.getElementById('timer-card');
+  if(timerCard){
+    if(state === "running" && level > 0 && t <= 3.0 && t > 0){
+      timerCard.classList.add('time-warn');
+    }else{
+      timerCard.classList.remove('time-warn');
+    }
+  }
 }
 function showOverlayCollapsing(reasonText){
   overlay.classList.add('show');
@@ -391,22 +562,24 @@ function showOverlayCollapsing(reasonText){
   const lb = document.getElementById('lb-wrap');
   if(lb) lb.style.display = "none";
 }
-function showOverlaySummary(){
+function showOverlaySummary(rankText){
   overlay.classList.add('show');
   overlay.setAttribute('aria-hidden','false');
-  ovTitle.textContent = "遊戲結束";
+  ovTitle.textContent = (endReason === "破關！") ? "恭喜破關" : "遊戲結束";
   ovSub.textContent = endReason;
+
   ovHeight.textContent = String(level);
   ovScore.textContent = String(score);
+  ovCombo.textContent = String(combo);
+  ovRank.textContent = rankText ?? "-";
+
   ovSummary.style.display = "grid";
   ovActions.style.display = "flex";
-
-  const myId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
-  const arr = addToLB({ id: myId, level, score, combo, ts: Date.now() });
-  renderLB(arr, myId);
 }
 
-// VFX helpers
+/* =========================
+   VFX helpers
+========================= */
 function spawnParticles(x,y,count=18){
   for(let i=0;i<count;i++){
     const a=Math.random()*Math.PI*2;
@@ -418,7 +591,6 @@ function addPopup(kind,text,x,y){
   popups.push({kind,text,x,y,age:0,life:0.75,rise:-22});
 }
 function easeOutCubic(t){return 1-Math.pow(1-t,3);}
-function clamp01(x){return Math.max(0,Math.min(1,x));}
 function popupScale(t01){
   if(t01<0.22){const u=t01/0.22;return 0.8+easeOutCubic(u)*0.7;}
   if(t01<0.42){const u=(t01-0.22)/0.20;return 1.5-easeOutCubic(u)*0.5;}
@@ -430,20 +602,24 @@ function popupAlpha(t01){
   return 1-easeOutCubic(clamp01(u));
 }
 
-// Spawn / Drop
+/* =========================
+   Spawn / Drop
+========================= */
 function spawnBlock(){
   if(state!=="running") return;
   if(spawnQueued) return;
   if(inputLock) return;
 
-  const w = level>=20 ? 60 : (level>=10 ? 90 : 120);
+  const nextLvl = level + 1;
+  const { w, h } = sizeForLevel(nextLvl);
+
   const highestY = stackedBlocks.length>0 ? stackedBlocks[stackedBlocks.length-1].position.y : groundY-60;
   const spawnY = highestY - 240;
 
   const hue = (level * 28 + Math.random()*12) % 360;
   const baseColor = `hsl(${hue}, 72%, 62%)`;
 
-  currentCraneBlock = Bodies.rectangle(viewW/2, spawnY, w, BLOCK_H, {
+  currentCraneBlock = Bodies.rectangle(viewW/2, spawnY, w, h, {
     isStatic:true,
     isSensor:true,
     restitution:MATERIAL.restitution,
@@ -456,6 +632,7 @@ function spawnBlock(){
 
   currentCraneBlock.plugin = currentCraneBlock.plugin || {};
   currentCraneBlock.plugin.baseColor = baseColor;
+  currentCraneBlock.plugin.drawH = h;
 
   cranePivotX = viewW/2;
   cranePivotY = spawnY - craneRadius;
@@ -470,6 +647,7 @@ function drop(){
   if(fallingBlock || pendingCommit) return;
 
   inputLock = true;
+
   const b=currentCraneBlock;
   Body.setStatic(b,false);
   b.isSensor=false;
@@ -480,7 +658,9 @@ function drop(){
   fallingBlock=b;
 }
 
-// Landing pipeline
+/* =========================
+   Landing pipeline
+========================= */
 function stabilizeOnLanding(body){
   const prevAir=body.frictionAir;
   body.frictionAir=LANDING_STABILIZE.frictionAirBoost;
@@ -563,13 +743,42 @@ function updatePendingCommit(nowTs){
   }
 }
 
+function winGame(){
+  state = "ended";
+  endReason = "破關！";
+  inputLock = true;
+  spawnQueued = false;
+  fallingBlock = null;
+  pendingCommit = null;
+  if(currentCraneBlock){
+    World.remove(world, currentCraneBlock);
+    currentCraneBlock = null;
+  }
+
+  const myId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  const arr = addToLB({ id: myId, level, score, combo, ts: Date.now() });
+  const rank = arr.findIndex(x=>x.id===myId) + 1;
+  renderLB(arr, myId);
+  showOverlaySummary(String(rank));
+}
+
 function commitSuccess(){
   if(!pendingCommit || state!=="running") return;
 
   const { body, diff, w } = pendingCommit;
   const isFirstLanding = (level === 0);
 
+  const segPrev = segmentIdForLevel(level);
   level++;
+  const segNow = segmentIdForLevel(level);
+
+  if(level >= MAX_LEVEL){
+    stackedBlocks.push(body);
+    pendingCommit = null;
+    updateUI();
+    winGame();
+    return;
+  }
 
   if(!isFirstLanding){
     const perfect = diff < w*0.05;
@@ -587,23 +796,24 @@ function commitSuccess(){
     combo = 0;
   }
 
-  // 落地後保護期：倒塌偵測跳過
+  // 落地後保護期：防止剛放上就被硬判壞
   const now = engine.timing.timestamp;
   body.plugin = body.plugin || {};
   body.plugin.stableUntil = now + 420;
 
   stackedBlocks.push(body);
 
+  // ✅ 進入第11層（段落切換）時：半封存舊段落（修第11關暴斃的核心）
+  if(segNow !== segPrev){
+    sealOldSegment(stackedBlocks);
+  }
+
+  cameraTargetY = computeCameraTargetFromLevel(level);
+
   timeLeft = ROUND_TIME;
   updateTimerUI();
-  setBackgroundForLevel(level);
+  setBackgroundForLevelSmooth(level);
   updateUI();
-
-  if(level > 3){
-    const baseCam = groundY - viewH + 160;
-    const risePerLevel = BLOCK_H * 0.62;
-    currentScrollY = Math.max(0, baseCam - (level - 3) * risePerLevel);
-  }
 
   pendingCommit = null;
 
@@ -615,7 +825,9 @@ function commitSuccess(){
   }, 140);
 }
 
-// Collision rule: 第 1 塊允許落地板；第 2 塊起碰地板即死
+/* =========================
+   Collision rule
+========================= */
 Events.on(engine,'collisionStart',(event)=>{
   if(state!=="running") return;
   if(!fallingBlock || pendingCommit) return;
@@ -640,7 +852,10 @@ Events.on(engine,'collisionStart',(event)=>{
   }
 });
 
-// 倒塌偵測：跳過保護期
+/* =========================
+   Collapse detector
+   ✅ 改成：只判「活動區」 + 不用相機視野 y 判死（避免第11層/縮放段落莫名暴斃）
+========================= */
 function updateCollapseDetector(dt){
   if(state!=="running") return;
   if(level < 2) { collapseBadMs = 0; return; }
@@ -648,28 +863,39 @@ function updateCollapseDetector(dt){
   let bad = false;
   const now = engine.timing.timestamp;
 
-  for(const b of stackedBlocks){
+  const active = getActiveBlocks(stackedBlocks);
+
+  // 1) 明確的「散掉/飛出」：左右越界、或真的掉到世界外
+  for(const b of active){
     const stableUntil = b.plugin?.stableUntil || 0;
     if(now < stableUntil) continue;
 
-    if(b.position.y > currentScrollY + viewH + COLLAPSE.outOfViewPadding) { bad = true; break; }
-    if(b.position.x < -COLLAPSE.xPadding || b.position.x > viewW + COLLAPSE.xPadding) { bad = true; break; }
+    if(b.position.x < -COLLAPSE.xPadding || b.position.x > viewW + COLLAPSE.xPadding){
+      bad = true; break;
+    }
+    if(b.position.y > WORLD_HEIGHT + FAIL.outOfWorldPadding){
+      bad = true; break;
+    }
   }
 
+  // 2) 動態指標：只對活動區中「未封存」的做硬判（封存者只負責穩定，不再成為莫名來源）
   if(!bad){
-    for(const b of stackedBlocks){
+    for(const b of active){
       const stableUntil = b.plugin?.stableUntil || 0;
       if(now < stableUntil) continue;
+      if(b.plugin?.sealed) continue;
 
       const absAngle = Math.abs(b.angle);
       const absOmega = Math.abs(b.angularVelocity);
       const sp = Math.hypot(b.velocity.x, b.velocity.y);
+
       if(absAngle > COLLAPSE.angleRad || absOmega > COLLAPSE.omega || sp > COLLAPSE.speed){
         bad = true; break;
       }
     }
   }
 
+  // holdMs 累積（保留你目前「落下/判定中稍放寬」）
   if(pendingCommit || fallingBlock){
     if(bad) collapseBadMs += dt*1000 * 0.55;
     else collapseBadMs = Math.max(0, collapseBadMs - dt*1000 * 0.7);
@@ -683,7 +909,9 @@ function updateCollapseDetector(dt){
   }
 }
 
-// Game Over
+/* =========================
+   Game Over
+========================= */
 function startGameOver(reason){
   if(state!=="running") return;
 
@@ -722,21 +950,32 @@ function startGameOver(reason){
 
   setTimeout(()=>{
     state="ended";
-    showOverlaySummary();
+
+    const myId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    const arr = addToLB({ id: myId, level, score, combo, ts: Date.now() });
+    const rank = arr.findIndex(x=>x.id===myId) + 1;
+
+    renderLB(arr, myId);
+    showOverlaySummary(String(rank));
   }, GAMEOVER.showSummaryMs);
 }
 
-// Update loop
+/* =========================
+   Update loop
+========================= */
 Events.on(engine,'beforeUpdate',()=>{
   const ts=engine.timing.timestamp;
   if(lastTimestamp==null) lastTimestamp=ts;
   const dt=(ts-lastTimestamp)/1000;
   lastTimestamp=ts;
 
-  applyCamera();
+  updateCamera();
   updateVfx(dt);
 
   if(state!=="running") return;
+
+  // ✅ 半封存：每幀微收斂（修第11層段落切換引發的底座振動）
+  dampSealedBlocks(stackedBlocks);
 
   if(currentCraneBlock){
     const speed=0.03+(level*0.003);
@@ -787,7 +1026,9 @@ function updateVfx(dt){
   }
 }
 
-// ---------- Drawing helpers ----------
+/* =========================
+   Drawing helpers
+========================= */
 function drawRoundedQuad(ctx, pts, r){
   const n = pts.length;
   const clampR = (pPrev, p, pNext, rr)=>{
@@ -819,7 +1060,6 @@ function drawRoundedQuad(ctx, pts, r){
   ctx.closePath();
   ctx.fill();
 }
-
 function hslToRgb(h, s, l){
   h/=360; s/=100; l/=100;
   const hue2rgb=(p,q,t)=>{
@@ -854,7 +1094,9 @@ function shadeHsl(hsl, dl){
   return rgbStr(rgb, 1);
 }
 
-// Sky decor (保持你原本視差概念；畫在螢幕座標即可)
+/* =========================
+   Sky decor
+========================= */
 function seededRand(seed){
   let x = Math.sin(seed) * 10000;
   return x - Math.floor(x);
@@ -908,7 +1150,6 @@ function drawPlanet(ctx, x, y, r){
   ctx.globalAlpha = 0.9;
   ctx.fillStyle = "rgba(160,210,255,1)";
   ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
-
   ctx.globalAlpha = 0.35;
   ctx.strokeStyle = "rgba(255,255,255,1)";
   ctx.lineWidth = 6;
@@ -957,18 +1198,19 @@ function drawSkyDecor(ctx){
   if(hasPlanet) drawPlanet(ctx, viewW*0.18, 140 + (par1 % 220)*0.10, 34);
 }
 
-// ✅ 這裡是關鍵修正：用 camY 把世界座標轉成螢幕座標
+/* =========================
+   Render (world -> screen)
+========================= */
 Events.on(render,'afterRender',()=>{
   const ctx = render.context;
   const now = engine.timing.timestamp;
 
-  const camY = render.bounds.min.y; // ✅ 相機頂端世界座標
+  const camY = render.bounds.min.y;
   const toScreenY = (y)=> y - camY;
 
-  // 先畫天空（天空用螢幕座標）
   drawSkyDecor(ctx);
 
-  // ground（用螢幕座標）
+  // ground
   if(ground){
     const gy = toScreenY(groundY - groundH/2);
     ctx.save();
@@ -979,7 +1221,6 @@ Events.on(render,'afterRender',()=>{
     ctx.restore();
   }
 
-  // draw list
   const list = [];
   list.push(...stackedBlocks);
   if(currentCraneBlock) list.push(currentCraneBlock);
@@ -987,25 +1228,23 @@ Events.on(render,'afterRender',()=>{
   if(pendingCommit?.body) list.push(pendingCommit.body);
 
   for(const b of list){
-    const w=(b.bounds.max.x-b.bounds.min.x);
-    const h=BLOCK_H;
+    const w = (b.bounds.max.x - b.bounds.min.x);
+    const h = (b.plugin && b.plugin.drawH) ? b.plugin.drawH : (b.bounds.max.y - b.bounds.min.y);
 
-    const baseColor = (b.plugin && b.plugin.baseColor) ? b.plugin.baseColor : "hsl(200,70%,60%)";
+    const baseColor = b.plugin?.baseColor || "hsl(200,70%,60%)";
     const front = shadeHsl(baseColor, 0);
     const top = shadeHsl(baseColor, +14);
     const side = shadeHsl(baseColor, -14);
 
-    const dx = 10;
-    const dy = -8;
-    const r = 8;
+    const dx = Math.max(4, 10 * (h/BASE_H));
+    const dy = -Math.max(3, 8 * (h/BASE_H));
+    const r  = Math.max(2, 8 * (h/BASE_H));
 
     ctx.save();
-
-    // ✅ 位置要扣 camY
     ctx.translate(b.position.x, toScreenY(b.position.y));
     ctx.rotate(b.angle);
 
-    const glowUntil=b.plugin && b.plugin.glowUntil ? b.plugin.glowUntil : 0;
+    const glowUntil=b.plugin?.glowUntil || 0;
     if(now<glowUntil){
       ctx.shadowBlur=18;
       ctx.shadowColor="rgba(255,209,102,0.75)";
@@ -1013,7 +1252,7 @@ Events.on(render,'afterRender',()=>{
       ctx.shadowBlur=0;
     }
 
-    // Top face
+    // top
     ctx.fillStyle = top;
     drawRoundedQuad(ctx, [
       {x:-w/2,      y:-h/2},
@@ -1022,7 +1261,7 @@ Events.on(render,'afterRender',()=>{
       {x: w/2,      y:-h/2}
     ], r);
 
-    // Side face
+    // side
     ctx.fillStyle = side;
     drawRoundedQuad(ctx, [
       {x: w/2,      y:-h/2},
@@ -1031,14 +1270,14 @@ Events.on(render,'afterRender',()=>{
       {x: w/2,      y: h/2}
     ], r);
 
-    // Front face
+    // front
     ctx.fillStyle = front;
     ctx.beginPath();
-    if(typeof ctx.roundRect==="function") ctx.roundRect(-w/2, -h/2, w, h, 12);
+    if(typeof ctx.roundRect==="function") ctx.roundRect(-w/2, -h/2, w, h, Math.max(3, 12*(h/BASE_H)));
     else ctx.rect(-w/2, -h/2, w, h);
     ctx.fill();
 
-    // Roof
+    // roof
     ctx.shadowBlur = 0;
     ctx.fillStyle = "rgba(255,255,255,0.18)";
     ctx.beginPath();
@@ -1048,25 +1287,27 @@ Events.on(render,'afterRender',()=>{
     ctx.closePath();
     ctx.fill();
 
-    // Windows
+    // windows
     const win = "rgba(255,255,255,0.28)";
     const winHi = "rgba(255,255,255,0.16)";
     const rows = [-h*0.15, h*0.18];
+    const ww = Math.max(3, 12*(h/BASE_H));
+    const wh = Math.max(4, 16*(h/BASE_H));
     for(const rowY of rows){
       for(let i=-1;i<=1;i++){
-        const wx = i*(w/4)-6;
-        const wy = rowY - 10;
+        const wx = i*(w/4) - ww*0.5;
+        const wy = rowY - wh*0.6;
         ctx.fillStyle = win;
-        ctx.fillRect(wx, wy, 12, 16);
+        ctx.fillRect(wx, wy, ww, wh);
         ctx.fillStyle = winHi;
-        ctx.fillRect(wx+2, wy+2, 8, 4);
+        ctx.fillRect(wx+ww*0.16, wy+wh*0.14, ww*0.68, wh*0.26);
       }
     }
 
     ctx.restore();
   }
 
-  // particles（要扣 camY）
+  // particles
   ctx.save();
   ctx.globalCompositeOperation="lighter";
   for(const p of particles){
@@ -1081,7 +1322,7 @@ Events.on(render,'afterRender',()=>{
   ctx.globalAlpha=1;
   ctx.globalCompositeOperation="source-over";
 
-  // popups（要扣 camY）
+  // popups
   ctx.save();
   ctx.textAlign="center";
   ctx.textBaseline="middle";
@@ -1105,8 +1346,10 @@ Events.on(render,'afterRender',()=>{
   ctx.globalAlpha=1;
 });
 
-// Leaderboard
-const LB_KEY = "star_builder_lb_v1";
+/* =========================
+   Leaderboard (local)
+========================= */
+const LB_KEY = "star_builder_lb_v2";
 const LB_MAX = 50;
 
 function loadLB(){
@@ -1135,14 +1378,6 @@ function addToLB(entry){
   saveLB(arr);
   return arr;
 }
-function fmtTime(ts){
-  const d = new Date(ts);
-  const mm = String(d.getMonth()+1).padStart(2,'0');
-  const dd = String(d.getDate()).padStart(2,'0');
-  const hh = String(d.getHours()).padStart(2,'0');
-  const mi = String(d.getMinutes()).padStart(2,'0');
-  return `${mm}/${dd} ${hh}:${mi}`;
-}
 function renderLB(arr, highlightId){
   const wrap = document.getElementById('lb-wrap');
   const list = document.getElementById('lb-list');
@@ -1160,7 +1395,6 @@ function renderLB(arr, highlightId){
       <div>${it.level}</div>
       <div>${it.score}</div>
       <div>${it.combo}</div>
-      <div style="opacity:.75;">${fmtTime(it.ts)}</div>
     `;
     list.appendChild(row);
   });
@@ -1169,7 +1403,7 @@ function renderLB(arr, highlightId){
   if(myIndex >= 30){
     const sep = document.createElement('div');
     sep.className = "lb-row";
-    sep.innerHTML = `<div>…</div><div>…</div><div>…</div><div>…</div><div></div>`;
+    sep.innerHTML = `<div>…</div><div>…</div><div>…</div><div>…</div>`;
     list.appendChild(sep);
 
     const it = arr[myIndex];
@@ -1180,13 +1414,14 @@ function renderLB(arr, highlightId){
       <div>${it.level}</div>
       <div>${it.score}</div>
       <div>${it.combo}</div>
-      <div style="opacity:.75;">${fmtTime(it.ts)}</div>
     `;
     list.appendChild(row);
   }
 }
 
-// Retry
+/* =========================
+   Retry / Input / Resize
+========================= */
 function onRetry(e){
   e.preventDefault();
   e.stopPropagation();
@@ -1195,11 +1430,9 @@ function onRetry(e){
 btnRetry.addEventListener('click', onRetry);
 btnRetry.addEventListener('touchstart', (e)=>{ e.preventDefault(); onRetry(e); }, { passive:false });
 
-// Input
 window.addEventListener('mousedown', drop);
 window.addEventListener('touchstart', (e)=>{ e.preventDefault(); drop(); }, { passive:false });
 
-// Resize
 function rebuildGround(){
   if(ground) World.remove(world, ground);
   groundY = WORLD_HEIGHT - 100;
@@ -1212,6 +1445,7 @@ function rebuildGround(){
   });
   World.add(world, ground);
 }
+
 window.addEventListener('resize', ()=>{
   viewW = window.innerWidth;
   viewH = window.innerHeight;
@@ -1221,17 +1455,24 @@ window.addEventListener('resize', ()=>{
   Render.setPixelRatio(render, window.devicePixelRatio || 1);
 
   rebuildGround();
-  currentScrollY = Math.max(0, groundY - viewH + 160);
+
+  cameraTargetY = computeCameraTargetFromLevel(level);
+  currentScrollY = Math.min(currentScrollY, cameraTargetY);
   applyCamera();
 });
 
-// Start
+/* =========================
+   Boot
+========================= */
 Render.run(render);
 Runner.run(Runner.create(), engine);
-timeLeft=ROUND_TIME;
+
+timeLeft = ROUND_TIME;
 updateTimerUI();
 updateUI();
-setBackgroundForLevel(0);
+setBackgroundForLevelSmooth(0);
+
+initCamera();
 spawnBlock();
 </script>
 </body>
