@@ -392,20 +392,31 @@ let ground = Bodies.rectangle(viewW/2, groundY, viewW, groundH, {
 World.add(world, ground);
 
 /* =========================
-   Camera（✅ 加 bottomPad）
+   Camera（✅ 只改相機 & 鐘擺：不要動其它）
 ========================= */
-const CAMERA = { smoothUp: 0.18, bottomPad: 60 };
+/* ✅ 相機：開局先貼地板；之後只單向往上追蹤塔頂(含鐘擺/落下/待確認) */
+const CAMERA = {
+  smoothUp: 0.18,
+  bottomPad: 30   /* ✅ 原本 60，調小讓地板更穩定地在畫面底部 */
+};
 
 let cameraTargetY = 0;
 let currentScrollY = 0;
 let skyScrollY = 0;
+
+/* ✅ 鐘擺：半徑更小、生成更貼近塔頂（不會越高越遠） */
+const CRANE = {
+  radius: 150,   /* ✅ 原本 200：縮小讓鐘擺更靠近塔 */
+  gapMin: 110,   /* ✅ 離塔頂最小距離（更近） */
+  gapMax: 150    /* ✅ 離塔頂最大距離（低樓層也不會太遠） */
+};
 
 let currentCraneBlock = null;
 let fallingBlock = null;
 let pendingCommit = null;
 
 let swingTime = 0;
-const craneRadius = 130;
+const craneRadius = CRANE.radius; /* ✅ 保留你原本 craneRadius 的使用點（只換數值來源） */
 let cranePivotX = 0;
 let cranePivotY = 0;
 
@@ -459,6 +470,7 @@ function applyCamera(){
 }
 
 function initCamera(){
+  /* ✅ 開局先把相機放在地板附近，保證看得到地板 */
   const startY = Math.max(0, groundY - viewH + CAMERA.bottomPad);
   cameraTargetY = startY;
   currentScrollY = startY;
@@ -583,7 +595,7 @@ function popupAlpha(t01){
 }
 
 /* =========================
-   Spawn / Drop
+   Spawn / Drop  (✅ 只改鐘擺距離/生成邏輯；其它不動)
 ========================= */
 function spawnBlock(){
   if(state!=="running") return;
@@ -596,26 +608,24 @@ function spawnBlock(){
   const { w, h } = sizeForLevel(nextLvl);
 
   const towerTopY = getTowerTopWorldY();
-  const GAP_ABOVE_TOWER = Math.max(220, craneRadius * 0.70 + h * 0.90);
+
+  /* ✅ 更近：gap 固定在一個小區間，不會因高度越高越遠 */
+  const gapByLevel = CRANE.gapMax - Math.min(40, level * 1.2);
+  const GAP_ABOVE_TOWER = Math.max(CRANE.gapMin, gapByLevel);
+
   let spawnY = towerTopY - GAP_ABOVE_TOWER;
 
   const safeTopWorldY = currentScrollY + (uiBottomPx + UI_SAFE.topPad);
   const needMinSpawnY = safeTopWorldY + UI_SAFE.craneMargin + (h/2) + (0.293 * craneRadius);
 
-  const extraClear = (level >= 5) ? 80 : 0;
-  const MIN_ABOVE_TOWER = 180 + extraClear;
-  const MAX_ABOVE_TOWER = 520 + extraClear;
-
-  spawnY = Math.min(spawnY, towerTopY - MIN_ABOVE_TOWER);
-  spawnY = Math.max(spawnY, towerTopY - MAX_ABOVE_TOWER);
-
+  /* ✅ 不把鐘擺往下壓：如果會撞 UI safe，就推相機往上 */
   if (spawnY < needMinSpawnY) {
     const desiredTopOnScreen = uiBottomPx + UI_SAFE.topPad + UI_SAFE.craneMargin;
     const camNeed = spawnY - desiredTopOnScreen;
     cameraTargetY = Math.min(cameraTargetY, Math.max(0, camNeed));
   }
 
-  const MIN_CLEAR_FROM_GROUND = 280;
+  const MIN_CLEAR_FROM_GROUND = 200;
   spawnY = Math.min(spawnY, groundY - MIN_CLEAR_FROM_GROUND);
 
   const hue = (level * 28 + Math.random()*12) % 360;
@@ -1180,19 +1190,15 @@ Events.on(render,'afterRender',()=>{
   const ctx = render.context;
   const now = engine.timing.timestamp;
 
-  // ✅ 正確：用 render.bounds.min.y 當作相機的 world Y
   const camY = render.bounds.min.y;
 
-  // ✅ 1) 先用「螢幕座標」畫天空（不吃 camera）
   ctx.save();
   ctx.setTransform(1,0,0,1,0,0);
   drawSkyDecor(ctx);
   ctx.restore();
 
-  // ✅ 2) 世界座標 -> 螢幕座標
   const toScreenY = (y)=> y - camY;
 
-  // ✅ 地板
   if(ground){
     const gy = toScreenY(groundY - groundH/2);
     ctx.save();
@@ -1203,7 +1209,6 @@ Events.on(render,'afterRender',()=>{
     ctx.restore();
   }
 
-  // ✅ 收集要畫的方塊（含鐘擺 currentCraneBlock）
   const list = [];
   list.push(...stackedBlocks);
   if(currentCraneBlock) list.push(currentCraneBlock);
@@ -1285,7 +1290,6 @@ Events.on(render,'afterRender',()=>{
     ctx.restore();
   }
 
-  // ✅ 粒子
   ctx.save();
   ctx.globalCompositeOperation="lighter";
   for(const p of particles){
@@ -1300,7 +1304,6 @@ Events.on(render,'afterRender',()=>{
   ctx.globalAlpha=1;
   ctx.globalCompositeOperation="source-over";
 
-  // ✅ Popups
   ctx.save();
   ctx.textAlign="center";
   ctx.textBaseline="middle";
@@ -1323,7 +1326,6 @@ Events.on(render,'afterRender',()=>{
   ctx.restore();
   ctx.globalAlpha=1;
 
-  // ✅ Debug：畫螢幕底線（一定在最底）
   ctx.save();
   ctx.setTransform(1,0,0,1,0,0);
   ctx.strokeStyle = "rgba(255,0,0,0.9)";
@@ -1334,7 +1336,6 @@ Events.on(render,'afterRender',()=>{
   ctx.stroke();
   ctx.restore();
 });
-
 
 /* =========================
    Leaderboard (local)
