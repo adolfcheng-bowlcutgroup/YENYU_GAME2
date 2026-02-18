@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>大羽建設(股)</title>
+  <title>大羽建設(股)V1</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
   <style>
     body{
@@ -305,8 +305,8 @@ const ROUND_TIME = 8;
 const MAX_LEVEL = 61;
 const CAMERA_STEP = 1;
 
-const MATERIAL = { restitution:0.02, friction:0.92, frictionStatic:0.98, frictionAir:0.02, density:0.0022 };
-const LANDING_STABILIZE = { frictionAirBoost:0.14, durationMs:70, velXScale:0.06, velYScale:0.45, angScale:0.22 };
+const MATERIAL = { restitution:0.02, friction:0.86, frictionStatic:0.98, frictionAir:0.02, density:0.0022 };
+const LANDING_STABILIZE = { frictionAirBoost:0.14, durationMs:110, velXScale:0.06, velYScale:0.45, angScale:0.22 };
 
 const STABILITY = { windowMs:240, maxAngleRad:0.78, maxOmega:2.35, maxYDrop:105, maxXDrift:66 };
 const COLLAPSE  = { holdMs:360, angleRad:1.1, omega:3.15, speed:8.4, xPadding:280 };
@@ -364,8 +364,8 @@ const SEAL = {
   velScale: 0.25,
   angScale: 0.20,
   continuousDamp: true,
-  perFrameVelScale: 0.985,
-  perFrameAngScale: 0.980
+  perFrameVelScale: 0.988,
+  perFrameAngScale: 0.985
 };
 const stackedBlocks = [];
 function getActiveBlocks(){
@@ -802,9 +802,12 @@ function commitSuccess(){
     const h = (body.bounds.max.y - body.bounds.min.y);
     const targetY = base.bounds.min.y - h/2;
 
+    // ✅ 只修 Y，完全不動 X（不會出現吸過去）
     Body.setPosition(body, { x: body.position.x, y: targetY });
-    Body.setVelocity(body, { x: body.velocity.x * 0.25, y: 0 });
-    Body.setAngularVelocity(body, body.angularVelocity * 0.25);
+
+    // ✅ 用速度阻尼取代“吸附”
+    Body.setVelocity(body, { x: body.velocity.x * 0.05, y: 0 });
+    Body.setAngularVelocity(body, body.angularVelocity * 0.18);
   }
 
   const isFirstLanding = (level === 0);
