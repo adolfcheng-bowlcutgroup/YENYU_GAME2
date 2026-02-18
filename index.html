@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>星際建築師 - 單向相機/分段縮放/61破關/時間警示/修正第11關暴斃</title>
+  <title>你4建築大師ㄇ</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
   <style>
     body{
@@ -23,7 +23,6 @@
       pointer-events:none;
       color:white;
 
-      /* ✅ 永遠不爆版（修 TIME 右邊超出） */
       width: min(520px, calc(100vw - 24px));
       box-sizing: border-box;
       padding: 0 2px;
@@ -72,7 +71,7 @@
     }
     #timer-fill{ width:100%; height:100%; background:#ff416c; }
 
-    /* ✅ 3 秒內紅色淡入淡出（35%） */
+    /* 3 秒內紅色淡入淡出（35%） */
     @keyframes timeWarnPulse {
       0%   { background: rgba(255, 65, 108, 0.00); }
       50%  { background: rgba(255, 65, 108, 0.35); }
@@ -226,8 +225,7 @@
       <div id="timer-text" class="value">8.0</div>
       <div id="timer-bar"><div id="timer-fill"></div></div>
     </div>
-
-    <!-- ✅ STABILITY 面板維持移除 -->
+    <!-- STABILITY 面板已移除 -->
   </div>
 
   <div id="overlay" aria-hidden="true">
@@ -328,10 +326,10 @@ const MAX_LEVEL = 61;
 const MATERIAL = { restitution:0.02, friction:0.92, frictionStatic:0.98, frictionAir:0.02, density:0.0022 };
 const LANDING_STABILIZE = { frictionAirBoost:0.14, durationMs:70, velXScale:0.06, velYScale:0.45, angScale:0.22 };
 
-/* 落地判定（保留你目前較寬鬆） */
+/* 落地判定（較寬鬆） */
 const STABILITY = { windowMs:220, maxAngleRad:0.72, maxOmega:2.2, maxYDrop:95, maxXDrift:60 };
 
-/* 倒塌偵測（第11關會用「半封存 + 活動區」避免莫名暴斃） */
+/* 倒塌偵測（活動區 + 半封存 避免第11關莫名暴斃） */
 const COLLAPSE  = { holdMs:320, angleRad:1.05, omega:3.0, speed:8.0, xPadding:280, outOfViewPadding:260 };
 
 const FAIL = { outOfViewPadding:220, outOfWorldPadding:600, xPadding:240 };
@@ -360,8 +358,7 @@ function sizeForLevel(lvl){
 }
 
 /* =========================
-   ✅ 只針對「第11層暴斃」加入：半封存舊段落 + 活動區判定
-   （來自你提供的穩定版做法）
+   Segment + Half-Seal（修第11關暴斃）
 ========================= */
 function segmentIdForLevel(lvl){
   if(lvl <= 10) return 0;
@@ -373,20 +370,20 @@ function segmentIdForLevel(lvl){
 }
 
 const SEAL = {
-  keepTop: 14,              // 活動區：只讓上面 N 顆參與倒塌硬判
-  frictionAir: 0.18,        // 半封存：強阻尼（但不是靜態）
-  velScale: 0.25,           // 封存瞬間收斂
+  keepTop: 14,
+  frictionAir: 0.18,
+  velScale: 0.25,
   angScale: 0.20,
-  continuousDamp: true,     // 每幀微阻尼（看起來不會突然變石頭）
+  continuousDamp: true,
   perFrameVelScale: 0.985,
   perFrameAngScale: 0.980
 };
 
-function getActiveBlocks(stackedBlocks){
+function getActiveBlocks(){
   return stackedBlocks.slice(Math.max(0, stackedBlocks.length - SEAL.keepTop));
 }
 
-function sealOldSegment(stackedBlocks){
+function sealOldSegment(){
   const cutoff = Math.max(0, stackedBlocks.length - SEAL.keepTop);
   const now = engine.timing.timestamp;
 
@@ -399,16 +396,14 @@ function sealOldSegment(stackedBlocks){
     b.plugin.sealedAt = now;
 
     b.frictionAir = Math.max(b.frictionAir, SEAL.frictionAir);
-
     Body.setVelocity(b, { x: b.velocity.x * SEAL.velScale, y: b.velocity.y * SEAL.velScale });
     Body.setAngularVelocity(b, b.angularVelocity * SEAL.angScale);
   }
 }
 
-function dampSealedBlocks(stackedBlocks){
+function dampSealedBlocks(){
   if(!SEAL.continuousDamp) return;
   const cutoff = Math.max(0, stackedBlocks.length - SEAL.keepTop);
-
   for(let i=0;i<cutoff;i++){
     const b = stackedBlocks[i];
     if(!b.plugin?.sealed) continue;
@@ -433,32 +428,77 @@ let ground = Bodies.rectangle(viewW/2, groundY, viewW, groundH, {
 World.add(world, ground);
 
 /* =========================
-   Camera (單向、只跟層數上升)
+   ✅ Camera（單向 + 真實塔頂追蹤 + lookAhead）
 ========================= */
-const CAMERA = { baseBottomPad: 260, smoothUp: 0.18 };
+const CAMERA = {
+  smoothUp: 0.22,     // ✅ 追快一點，避免永遠慢半拍
+  uiSafeTop: 170,     // UI 區高度（你可調）
+  topPad: 120,         // ✅ 塔頂到 UI 下方的緩衝（可 60~140）
+  bottomPad: 260,
+  lookAhead: 260      // ✅ 提前看上方（可 160~300）
+};
+
+// ✅ 每 4 層才允許相機更新一次
+const CAM_STEP = 2;
+let nextCamTriggerLevel = CAM_STEP;
+
+// 只在觸發時重新計算一次目標（單向：只往上）
+function requestCameraMove(){
+  const dynTarget = computeCameraTargetFromTower();
+  if(dynTarget < cameraTargetY) cameraTargetY = dynTarget;
+}
+
+
 let cameraTargetY = 0;
 let currentScrollY = 0;
 
-function riseForLevel(lvl){
-  const { h } = sizeForLevel(lvl);
-  return Math.max(8, h * 0.72);
+function computeCameraTargetFromTower(){
+  // ✅ 把「會讓畫面變高」的全部都算進來
+  const bodies = [];
+  bodies.push(...stackedBlocks);
+  if(pendingCommit?.body) bodies.push(pendingCommit.body);
+  if(fallingBlock) bodies.push(fallingBlock);
+  if(currentCraneBlock) bodies.push(currentCraneBlock);
+
+  if(bodies.length === 0){
+    return Math.max(0, groundY - viewH + CAMERA.bottomPad);
+  }
+
+  // 最高點：bounds.min.y 最小
+  let topY = bodies[0].bounds.min.y;
+  for(const b of bodies){
+    if(b.bounds.min.y < topY) topY = b.bounds.min.y;
+  }
+
+  // ✅ look-ahead：讓鏡頭提早上抬
+  topY -= CAMERA.lookAhead;
+
+  const desiredTopOnScreen = CAMERA.uiSafeTop + CAMERA.topPad;
+  let targetY = topY - desiredTopOnScreen;
+
+  // 不要超出世界頂部
+  targetY = Math.max(0, targetY);
+
+  return targetY;
 }
-function computeCameraTargetFromLevel(lvl){
-  let y = Math.max(0, groundY - viewH + CAMERA.baseBottomPad);
-  for(let i=1;i<=lvl;i++) y -= riseForLevel(i);
-  return Math.max(0, y);
-}
+
 function initCamera(){
-  cameraTargetY = computeCameraTargetFromLevel(level);
+  cameraTargetY = computeCameraTargetFromTower();
   currentScrollY = cameraTargetY;
+  nextCamTriggerLevel = CAM_STEP; // ✅ 重設
   applyCamera();
 }
+
+
 function updateCamera(){
+  // ✅ 不再每幀算 dynTarget；只追逐「上一個觸發點」算好的 cameraTargetY
   if(cameraTargetY < currentScrollY){
     currentScrollY = currentScrollY + (cameraTargetY - currentScrollY) * CAMERA.smoothUp;
   }
   applyCamera();
 }
+
+
 function applyCamera(){
   const y = Math.max(0, Math.min(WORLD_HEIGHT - viewH, currentScrollY));
   render.bounds.min.x = 0;
@@ -486,13 +526,11 @@ let cranePivotX = 0;
 let cranePivotY = 0;
 
 let lastTimestamp = null;
-
 const particles = [];
 const popups = [];
 
 let pendingCommit = null;
 let spawnQueued = false;
-
 let collapseBadMs = 0;
 
 /* =========================
@@ -803,12 +841,17 @@ function commitSuccess(){
 
   stackedBlocks.push(body);
 
-  // ✅ 進入第11層（段落切換）時：半封存舊段落（修第11關暴斃的核心）
-  if(segNow !== segPrev){
-    sealOldSegment(stackedBlocks);
+  // ✅ 每 4 層才更新一次相機目標
+  if(level >= nextCamTriggerLevel){
+    requestCameraMove();
+    nextCamTriggerLevel += CAM_STEP;
   }
 
-  cameraTargetY = computeCameraTargetFromLevel(level);
+
+  // 段落切換：半封存舊段落（修第11關暴斃）
+  if(segNow !== segPrev){
+    sealOldSegment();
+  }
 
   timeLeft = ROUND_TIME;
   updateTimerUI();
@@ -853,8 +896,7 @@ Events.on(engine,'collisionStart',(event)=>{
 });
 
 /* =========================
-   Collapse detector
-   ✅ 改成：只判「活動區」 + 不用相機視野 y 判死（避免第11層/縮放段落莫名暴斃）
+   Collapse detector（活動區 + 不用相機視野 y 判死）
 ========================= */
 function updateCollapseDetector(dt){
   if(state!=="running") return;
@@ -863,9 +905,9 @@ function updateCollapseDetector(dt){
   let bad = false;
   const now = engine.timing.timestamp;
 
-  const active = getActiveBlocks(stackedBlocks);
+  const active = getActiveBlocks();
 
-  // 1) 明確的「散掉/飛出」：左右越界、或真的掉到世界外
+  // 1) 明確散掉：左右越界、或掉到世界外
   for(const b of active){
     const stableUntil = b.plugin?.stableUntil || 0;
     if(now < stableUntil) continue;
@@ -878,7 +920,7 @@ function updateCollapseDetector(dt){
     }
   }
 
-  // 2) 動態指標：只對活動區中「未封存」的做硬判（封存者只負責穩定，不再成為莫名來源）
+  // 2) 動態指標：只對活動區中「未封存」做硬判
   if(!bad){
     for(const b of active){
       const stableUntil = b.plugin?.stableUntil || 0;
@@ -895,7 +937,7 @@ function updateCollapseDetector(dt){
     }
   }
 
-  // holdMs 累積（保留你目前「落下/判定中稍放寬」）
+  // holdMs 累積（落下/判定中放寬）
   if(pendingCommit || fallingBlock){
     if(bad) collapseBadMs += dt*1000 * 0.55;
     else collapseBadMs = Math.max(0, collapseBadMs - dt*1000 * 0.7);
@@ -974,9 +1016,10 @@ Events.on(engine,'beforeUpdate',()=>{
 
   if(state!=="running") return;
 
-  // ✅ 半封存：每幀微收斂（修第11層段落切換引發的底座振動）
-  dampSealedBlocks(stackedBlocks);
+  // 半封存：每幀微收斂（更穩）
+  dampSealedBlocks();
 
+  // 起重機左右擺
   if(currentCraneBlock){
     const speed=0.03+(level*0.003);
     swingTime+=speed;
@@ -989,6 +1032,7 @@ Events.on(engine,'beforeUpdate',()=>{
     Body.setAngularVelocity(currentCraneBlock,0);
   }
 
+  // 倒數計時
   if(level>0){
     timeLeft-=dt;
     updateTimerUI();
@@ -998,6 +1042,7 @@ Events.on(engine,'beforeUpdate',()=>{
     }
   }
 
+  // 下落越界
   if(fallingBlock){
     const b=fallingBlock;
     if(b.position.y>currentScrollY+viewH+FAIL.outOfViewPadding){ startGameOver("建築掉落！"); return; }
@@ -1176,7 +1221,7 @@ function drawSkyDecor(ctx){
       const rx = seededRand(seed) * viewW;
       const ry = 80 + seededRand(seed+9) * 180;
       const s = 0.7 + seededRand(seed+3)*0.9;
-      const y = ry + (par2 % 240) * 0.25;
+      const y = ry + (par2 % 4000) * 0.25;
       drawCloud(ctx, rx, y, s, 0.55);
     }
   }
@@ -1189,7 +1234,7 @@ function drawSkyDecor(ctx){
       const seed = 5000 + i*31;
       const x = seededRand(seed) * viewW;
       const baseY = 40 + seededRand(seed+5) * 280;
-      const y = baseY + (par1 % 360) * 0.08;
+      const y = baseY + par1 * 0.08;
       const r = 3 + seededRand(seed+8)*3.5;
       const a = 0.25 + seededRand(seed+11)*0.55;
       drawStar(ctx, x, y, r, a);
@@ -1456,7 +1501,8 @@ window.addEventListener('resize', ()=>{
 
   rebuildGround();
 
-  cameraTargetY = computeCameraTargetFromLevel(level);
+  // 重新以當前塔狀態校正一次（仍保持單向）
+  requestCameraMove();
   currentScrollY = Math.min(currentScrollY, cameraTargetY);
   applyCamera();
 });
