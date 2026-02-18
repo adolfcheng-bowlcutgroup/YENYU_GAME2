@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>你4建築大師ㄇ</title>
+  <title>星際建築師 - 單向相機/分段縮放/61破關/時間警示/修正第11關暴斃 + 相機追高</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
   <style>
     body{
@@ -439,7 +439,7 @@ const CAMERA = {
 };
 
 // ✅ 每 4 層才允許相機更新一次
-const CAM_STEP = 2;
+const CAM_STEP = 4;
 let nextCamTriggerLevel = CAM_STEP;
 
 // 只在觸發時重新計算一次目標（單向：只往上）
