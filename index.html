@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>大羽建設(股)V2</title>
+  <title>建築大師V2.19</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
   <style>
     body{
@@ -30,7 +30,7 @@
       gap:10px;
     }
 
-    /* ✅ 新增：Round 指示（不影響既有排版） */
+    /* Round 指示 */
     #round-badge{
       position:absolute;
       right: 6px;
@@ -126,20 +126,64 @@
       font-size: 16px;
     }
 
+    /* ✅ Round3 的 TOTAL 大字（放在標題下方） */
+    #ov-total-big{
+      display:none;
+      margin: 6px 0 10px 0;
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.20);
+      background: rgba(0,0,0,0.22);
+      text-align:center;
+    }
+    #ov-total-big .k{
+      font-size: 12px;
+      opacity: 0.80;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+    #ov-total-big .v{
+      margin-top: 4px;
+      font-size: 44px;
+      font-weight: 900;
+      text-shadow: 0 0 18px rgba(255,255,255,0.22);
+    }
+
     .summary{
       margin-top: 10px;
       display:grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
     }
+    /* ✅ Round3：LEVEL/SCORE/COMBO 三個並排 */
+    .summary.r3{
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+
     .card{
       border-radius: 14px;
       padding: 12px 12px;
       border: 1px solid rgba(255,255,255,0.16);
       background: rgba(0,0,0,0.22);
+      transition: box-shadow 0.18s ease, border-color 0.18s ease;
     }
     .card .k{ font-size: 12px; color: rgba(255,255,255,0.75); text-transform: uppercase; letter-spacing: 0.8px; }
     .card .v{ margin-top: 4px; font-size: 26px; font-weight: 900; }
+
+    /* ✅ 卡片邊框閃一下 */
+    @keyframes cardFlash {
+      0%   { border-color: rgba(255,255,255,0.16); box-shadow: 0 0 0 rgba(0,0,0,0); }
+      35%  { border-color: rgba(255,209,102,0.95); box-shadow: 0 0 22px rgba(255,209,102,0.35); }
+      100% { border-color: rgba(255,255,255,0.16); box-shadow: 0 0 0 rgba(0,0,0,0); }
+    }
+    .flash-once{
+      animation: cardFlash 0.52s ease-out 1;
+    }
+
+    /* ✅ TOTAL 也閃一下（同感覺） */
+    #ov-total-big.flash-once{
+      animation: cardFlash 0.58s ease-out 1;
+    }
 
     .actions{
       margin-top: 12px;
@@ -164,8 +208,6 @@
       pointer-events:auto;
     }
     button:active{ transform: scale(0.98); }
-
-    /* ✅ 新增：Round2 動畫期間鎖按鈕 */
     button:disabled{
       opacity: 0.55;
       cursor: default;
@@ -189,7 +231,7 @@
     }
     .lb-row{
       display:grid;
-      grid-template-columns: 42px 1fr 140px; /* ✅ 排名 / 玩家ID / 總分 */
+      grid-template-columns: 42px 1fr 140px;
       gap: 8px;
       align-items:center;
       padding: 8px 6px;
@@ -207,12 +249,19 @@
       z-index: 2;
     }
     .lb-me{ background: rgba(78,204,163,0.20); border-radius: 10px; }
+
+    /* ✅ 面板內粒子 Canvas */
+    #ov-fx{
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+      display:none;
+    }
   </style>
 </head>
 
 <body>
   <div id="ui">
-    <!-- ✅ Round 指示 -->
     <div id="round-badge" class="label">ROUND 1/3</div>
 
     <div id="hud-top">
@@ -239,15 +288,22 @@
 
   <div id="overlay" aria-hidden="true">
     <div class="backdrop"></div>
-    <div class="panel" role="dialog" aria-modal="true">
+    <div class="panel" role="dialog" aria-modal="true" id="ov-panel">
+      <canvas id="ov-fx"></canvas>
+
       <h1 id="ov-title">建築物倒塌</h1>
       <p id="ov-sub">正在崩塌中…</p>
 
+      <div id="ov-total-big">
+        <div class="k">TOTAL</div>
+        <div class="v" id="ov-total-big-v">0</div>
+      </div>
+
       <div class="summary" id="ov-summary" style="display:none;">
-        <div class="card"><div class="k" id="ov-k1">LEVEL</div><div class="v" id="ov-height">0</div></div>
-        <div class="card"><div class="k" id="ov-k2">Score</div><div class="v" id="ov-score">0</div></div>
-        <div class="card"><div class="k" id="ov-k3">Combo</div><div class="v" id="ov-combo">0</div></div>
-        <div class="card"><div class="k" id="ov-k4">ROUND SCORE</div><div class="v" id="ov-rank">-</div></div>
+        <div class="card" id="ov-card-1"><div class="k" id="ov-k1">LEVEL</div><div class="v" id="ov-height">0</div></div>
+        <div class="card" id="ov-card-2"><div class="k" id="ov-k2">Score</div><div class="v" id="ov-score">0</div></div>
+        <div class="card" id="ov-card-3"><div class="k" id="ov-k3">Combo</div><div class="v" id="ov-combo">0</div></div>
+        <div class="card" id="ov-card-4"><div class="k" id="ov-k4">ROUND SCORE</div><div class="v" id="ov-rank">-</div></div>
       </div>
 
       <div class="actions" id="ov-actions" style="display:none;">
@@ -277,7 +333,6 @@ const { Engine, Render, Runner, World, Bodies, Body, Events, Constraint } = Matt
 const engine = Engine.create();
 const world = engine.world;
 
-// ✅ D: 開啟 sleeping
 engine.enableSleeping = true;
 
 engine.positionIterations = 10;
@@ -318,29 +373,37 @@ const ovK2 = document.getElementById('ov-k2');
 const ovK3 = document.getElementById('ov-k3');
 const ovK4 = document.getElementById('ov-k4');
 
+const ovPanel = document.getElementById('ov-panel');
+const ovTotalBig = document.getElementById('ov-total-big');
+const ovTotalBigV = document.getElementById('ov-total-big-v');
+const ovCard1 = document.getElementById('ov-card-1');
+const ovCard2 = document.getElementById('ov-card-2');
+const ovCard3 = document.getElementById('ov-card-3');
+const ovCard4 = document.getElementById('ov-card-4');
+
+const ovFx = document.getElementById('ov-fx');
+
 /* =========================
-   三回合賽制（新增）
+   三回合賽制
 ========================= */
 const ROUND_COUNT = 3;
-const ROUND_TIMES = [12, 8, 6]; // R1/R2/R3
-let roundIndex = 1;             // 1..3
+const ROUND_TIMES = [12, 8, 6];
+let roundIndex = 1;
 let roundTime = ROUND_TIMES[0];
 
 let runId = "";
-let playerId = "-";             // 預留
+let playerId = "-";
 let tsStart = 0;
 let tsEnd = 0;
 
-let roundScores = [0,0,0];      // 回合結算分
-let cumulativeScore = 0;        // R1+R2（供 Round2 動畫使用）
-let totalPerfect = 0;           // 回合內累積 perfect 次數（結算用）
+let roundScores = [0,0,0];
+let totalPerfect = 0;
 
 function setRoundBadge(){
   if(roundBadge) roundBadge.textContent = `ROUND ${roundIndex}/${ROUND_COUNT}`;
 }
 function getRoundTime(idx){ return ROUND_TIMES[Math.max(1, Math.min(ROUND_COUNT, idx)) - 1]; }
 function computeRoundScore(){
-  // (LEVEL*100)+(SCORE*5)+(COMBO*50)
   return (level*100) + (score*5) + (totalPerfect*50);
 }
 function lockActionButton(lock){
@@ -349,7 +412,203 @@ function lockActionButton(lock){
 }
 
 /* =========================
-   Tunables（原封不動）
+   ✅ 卡片閃一下（新增）
+========================= */
+function flashOnce(el){
+  if(!el) return;
+  el.classList.remove('flash-once');
+  // force reflow
+  void el.offsetWidth;
+  el.classList.add('flash-once');
+}
+
+/* =========================
+   ✅ 結算數字跑動（新增）
+========================= */
+function animateNumber(el, from, to, durMs){
+  return new Promise((resolve)=>{
+    const start = performance.now();
+    const a = Number(from) || 0;
+    const b = Number(to) || 0;
+    const D = Math.max(120, durMs|0);
+
+    function step(now){
+      const t = Math.min(1, (now - start) / D);
+      const te = t*t*(3-2*t);
+      const v = Math.round(a + (b - a) * te);
+      el.textContent = String(v);
+      if(t < 1) requestAnimationFrame(step);
+      else resolve();
+    }
+    requestAnimationFrame(step);
+  });
+}
+
+async function runSummaryCountUp({ isLast, roundScore, totalScore, showCumulativeAfterRound2 }){
+  lockActionButton(true);
+
+  if(isLast){
+    ovTotalBigV.textContent = "0";
+    await animateNumber(ovTotalBigV, 0, totalScore, 880);
+    flashOnce(ovTotalBig);                 // ✅ Round3 TOTAL 跑完閃一下
+    startOverlayParticlesBurst(2);         // ✅ 粒子型「煙火」
+    await new Promise(r=>setTimeout(r, 90));
+
+    ovHeight.textContent = "0";
+    ovScore.textContent = "0";
+    ovCombo.textContent = "0";
+
+    await animateNumber(ovHeight, 0, level, 420);
+    flashOnce(ovCard1);
+
+    await animateNumber(ovScore, 0, score, 520);
+    flashOnce(ovCard2);
+
+    await animateNumber(ovCombo, 0, totalPerfect, 460);
+    flashOnce(ovCard3);
+
+    lockActionButton(false);
+    return;
+  }
+
+  ovHeight.textContent = "0";
+  ovScore.textContent = "0";
+  ovCombo.textContent = "0";
+  ovRank.textContent  = "0";
+
+  await animateNumber(ovHeight, 0, level, 420);
+  flashOnce(ovCard1);
+
+  await animateNumber(ovScore, 0, score, 520);
+  flashOnce(ovCard2);
+
+  await animateNumber(ovCombo, 0, totalPerfect, 460);
+  flashOnce(ovCard3);
+
+  await animateNumber(ovRank, 0, roundScore, 720);
+  flashOnce(ovCard4);
+
+  // ✅ ROUND SCORE 結算完噴粒子
+  startOverlayParticlesBurst(2);
+
+  if(showCumulativeAfterRound2){
+    await new Promise(r=>setTimeout(r, 220));
+
+    const from = roundScore;
+    const to = (roundScores[0]||0) + (roundScores[1]||0);
+
+    ovK4.textContent = "CUMULATIVE";
+    ovRank.textContent = String(from);
+
+    await animateNumber(ovRank, from, to, 820);
+    flashOnce(ovCard4);
+  }
+
+  lockActionButton(false);
+}
+
+/* =========================
+   ✅ 面板內「蓋房子那種粒子」煙火（改版）
+   - 乾淨點狀粒子（同你遊戲內粒子風格）
+   - 無拖尾、無疊色，重力下落淡出
+========================= */
+let fxRAF = 0;
+let fxParticles = [];
+
+function resizeFxCanvas(){
+  if(!ovFx || !ovPanel) return;
+  const r = ovPanel.getBoundingClientRect();
+  const dpr = (window.devicePixelRatio||1);
+  ovFx.width  = Math.max(2, Math.floor(r.width * dpr));
+  ovFx.height = Math.max(2, Math.floor(r.height * dpr));
+  ovFx.style.width = r.width + "px";
+  ovFx.style.height = r.height + "px";
+}
+
+function spawnFxBurst(){
+  const dpr = (window.devicePixelRatio||1);
+  const w = ovFx.width, h = ovFx.height;
+
+  const cx = w * (0.35 + Math.random()*0.30);
+  const cy = h * (0.22 + Math.random()*0.22);
+
+  const count = 26 + Math.floor(Math.random()*14);
+  for(let i=0;i<count;i++){
+    const a = Math.random() * Math.PI * 2;
+    const sp = (1.8 + Math.random()*3.6) * dpr * 0.35; // ✅ 對齊遊戲內粒子速度手感
+    fxParticles.push({
+      x: cx, y: cy,
+      vx: Math.cos(a)*sp,
+      vy: Math.sin(a)*sp - 1.6*dpr*0.35,
+      life: 0.5 + Math.random()*0.35,
+      r: 2.0 * dpr * 0.65
+    });
+  }
+}
+
+function startOverlayParticlesBurst(bursts=2){
+  if(!ovFx) return;
+
+  cancelAnimationFrame(fxRAF);
+  fxParticles.length = 0;
+
+  ovFx.style.display = "block";
+  resizeFxCanvas();
+
+  for(let i=0;i<bursts;i++){
+    setTimeout(spawnFxBurst, i*140);
+  }
+
+  const ctx = ovFx.getContext('2d');
+  const dpr = (window.devicePixelRatio||1);
+
+  let last = performance.now();
+  function tick(now){
+    const dt = Math.min(0.033, (now - last)/1000);
+    last = now;
+
+    // ✅ 乾淨：每幀清空，不做拖尾
+    ctx.clearRect(0,0,ovFx.width,ovFx.height);
+
+    for(let i=fxParticles.length-1;i>=0;i--){
+      const p = fxParticles[i];
+      p.life -= dt;
+      if(p.life <= 0){ fxParticles.splice(i,1); continue; }
+
+      // ✅ 對齊遊戲內粒子：vy += 8*dt
+      p.vy += 8 * dt * dpr * 0.35;
+
+      p.x += p.vx;
+      p.y += p.vy;
+
+      p.vx *= 0.98;
+      p.vy *= 0.98;
+
+      const alpha = Math.max(0, Math.min(1, p.life / 0.85));
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(255, 209, 102, 1)";
+      ctx.fill();
+    }
+
+    ctx.globalAlpha = 1;
+
+    if(fxParticles.length > 0){
+      fxRAF = requestAnimationFrame(tick);
+    }else{
+      ctx.clearRect(0,0,ovFx.width,ovFx.height);
+      ovFx.style.display = "none";
+      cancelAnimationFrame(fxRAF);
+      fxRAF = 0;
+    }
+  }
+
+  fxRAF = requestAnimationFrame(tick);
+}
+
+/* =========================
+   Tunables
 ========================= */
 function relaxFactor(){
   const tRaw = (level - 10) / 51;
@@ -359,7 +618,6 @@ function relaxFactor(){
 }
 
 const MAX_LEVEL = 61;
-const CAMERA_STEP = 1;
 
 const MATERIAL = {
   restitution: 0.00,
@@ -383,7 +641,7 @@ const FAIL = { outOfViewPadding:220, outOfWorldPadding:600, xPadding:240 };
 const GAMEOVER = { removeGroundMs:350, showSummaryMs:1150 };
 
 /* =========================
-   UI Safe Zone（量測UI底部）
+   UI Safe Zone
 ========================= */
 let uiBottomPx = 170;
 const UI_SAFE = { topPad: 22, craneMargin: 14 };
@@ -417,7 +675,7 @@ function sizeForLevel(lvl){
 }
 
 /* =========================
-   半封存 + 活動區
+   半封存
 ========================= */
 function segmentIdForLevel(lvl){
   if(lvl <= 10) return 0;
@@ -451,8 +709,6 @@ function sealOldSegment(){
 
     b.plugin.sealed = true;
     b.plugin.sealedAt = now;
-
-    // 記住封存瞬間的 X，之後鎖住水平漂移
     b.plugin.lockX = b.position.x;
 
     b.frictionAir = Math.max(b.frictionAir, SEAL.frictionAir);
@@ -460,6 +716,7 @@ function sealOldSegment(){
     Body.setAngularVelocity(b, b.angularVelocity * SEAL.angScale);
   }
 }
+
 function dampSealedBlocks(){
   if(!SEAL.continuousDamp) return;
   const cutoff = Math.max(0, stackedBlocks.length - SEAL.keepTop);
@@ -642,7 +899,7 @@ function setBackgroundForLevelSmooth(lvl){
 function updateUI(){
   document.getElementById('score').innerText = score;
   document.getElementById('level').innerText = level;
-  document.getElementById('combo').innerText = combo; // 遊戲中顯示 streak
+  document.getElementById('combo').innerText = combo;
 }
 function updateTimerUI(){
   const t = Math.max(0, timeLeft);
@@ -662,11 +919,14 @@ function showOverlayCollapsing(reasonText){
   ovSub.textContent = reasonText + "（崩塌中…）";
   ovSummary.style.display = "none";
   ovActions.style.display = "none";
+  if(ovTotalBig) ovTotalBig.style.display = "none";
+  ovSummary.classList.remove('r3');
+  if(ovCard4) ovCard4.style.display = "block";
   const lb = document.getElementById('lb-wrap');
   if(lb) lb.style.display = "none";
 }
 
-function showOverlaySummaryCards({ titleText, subText, k4Text, v4Text, buttonText, showLB, lockBtn }){
+function showOverlaySummaryBase({ titleText, subText, buttonText, showLB, isLastRound }){
   overlay.classList.add('show');
   overlay.setAttribute('aria-hidden','false');
 
@@ -676,74 +936,34 @@ function showOverlaySummaryCards({ titleText, subText, k4Text, v4Text, buttonTex
   ovK1.textContent = "LEVEL";
   ovK2.textContent = "SCORE";
   ovK3.textContent = "COMBO";
-  ovK4.textContent = k4Text;
 
-  ovHeight.textContent = String(level);
-  ovScore.textContent = String(score);
-  ovCombo.textContent = String(totalPerfect); // 結算顯示累積 perfect 次數
-  ovRank.textContent  = String(v4Text);
+  btnRetry.textContent = buttonText;
 
   ovSummary.style.display = "grid";
   ovActions.style.display = "block";
-  btnRetry.textContent = buttonText;
 
-  lockActionButton(!!lockBtn);
+  if(isLastRound){
+    if(ovTotalBig) ovTotalBig.style.display = "block";
+    ovSummary.classList.add('r3');
+    if(ovCard4) ovCard4.style.display = "none";
+  }else{
+    if(ovTotalBig) ovTotalBig.style.display = "none";
+    ovSummary.classList.remove('r3');
+    if(ovCard4) ovCard4.style.display = "block";
+    ovK4.textContent = "ROUND SCORE";
+  }
 
   const lb = document.getElementById('lb-wrap');
   if(lb) lb.style.display = showLB ? "block" : "none";
 
   btnRetry.style.pointerEvents = "auto";
   ovActions.style.pointerEvents = "auto";
-}
 
-/* =========================
-   Round2：數字跑動動畫（新增）
-========================= */
-function animateRound2ToCumulative(fromScore, toScore, done){
-  // 文字動畫：ROUND SCORE -> CUMULATIVE
-  const D = 820; // 需要看完才可按
-  const start = performance.now();
-
-  function step(now){
-    const t = Math.min(1, (now - start) / D);
-    const te = t * t * (3 - 2 * t);
-    const v = Math.round(fromScore + (toScore - fromScore) * te);
-    ovK4.textContent = "CUMULATIVE";
-    ovRank.textContent = String(v);
-    if(t < 1) requestAnimationFrame(step);
-    else done && done();
+  if(ovFx){
+    ovFx.style.display = "none";
+    const ctx = ovFx.getContext('2d');
+    if(ctx) ctx.clearRect(0,0,ovFx.width,ovFx.height);
   }
-
-  // 先顯示本回合得分一下（感覺更明確）
-  ovK4.textContent = "ROUND SCORE";
-  ovRank.textContent = String(fromScore);
-
-  setTimeout(()=> requestAnimationFrame(step), 180);
-}
-
-/* =========================
-   VFX helpers
-========================= */
-function spawnParticles(x,y,count=18){
-  for(let i=0;i<count;i++){
-    const a=Math.random()*Math.PI*2;
-    const sp=1.8+Math.random()*3.6;
-    particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-1.6,life:0.5+Math.random()*0.35});
-  }
-}
-function addPopup(kind,text,x,y){
-  popups.push({kind,text,x,y,age:0,life:0.75,rise:-22});
-}
-function easeOutCubic(t){return 1-Math.pow(1-t,3);}
-function popupScale(t01){
-  if(t01<0.22){const u=t01/0.22;return 0.8+easeOutCubic(u)*0.7;}
-  if(t01<0.42){const u=(t01-0.22)/0.20;return 1.5-easeOutCubic(u)*0.5;}
-  return 1.0;
-}
-function popupAlpha(t01){
-  if(t01<0.55) return 1;
-  const u=(t01-0.55)/0.45;
-  return 1-easeOutCubic(clamp01(u));
 }
 
 /* =========================
@@ -907,11 +1127,6 @@ function updatePendingCommit(nowTs){
   }
 }
 
-function winGame(){
-  // ✅ 破關也算回合結束，但第二回合仍繼續玩（由 endRound 控制）
-  endRound("破關！", "win");
-}
-
 function commitSuccess(){
   if(!pendingCommit || state!=="running") return;
 
@@ -942,7 +1157,7 @@ function commitSuccess(){
     stackedBlocks.push(body);
     pendingCommit = null;
     updateUI();
-    winGame();
+    endRound("破關！", "win");
     return;
   }
 
@@ -951,7 +1166,7 @@ function commitSuccess(){
     if(perfect){
       combo++;
       score += 10 + (combo*25);
-      totalPerfect++; // ✅ 回合內累積 perfect 次數（結算用）
+      totalPerfect++;
     }else{
       combo = 0;
       score += 10;
@@ -970,12 +1185,6 @@ function commitSuccess(){
   stackedBlocks.push(body);
 
   if(segNow !== segPrev) sealOldSegment();
-
-  const CAMERA_START_LEVEL = 3;
-  if(level >= CAMERA_START_LEVEL){
-    const stepTarget = computeCameraTargetFromSafeTop();
-    if(stepTarget < cameraTargetY) cameraTargetY = stepTarget;
-  }
 
   timeLeft = roundTime;
   updateTimerUI();
@@ -1039,24 +1248,18 @@ function updateCollapseDetector(dt){
   }
 
   if(!bad){
-    for(const b of active){
-      const stableUntil = b.plugin?.stableUntil || 0;
-      if(now < stableUntil) continue;
-      if(b.plugin?.sealed) continue;
+    for(const bb of active){
+      const stableUntil2 = bb.plugin?.stableUntil || 0;
+      if(now < stableUntil2) continue;
+      if(bb.plugin?.sealed) continue;
 
+      const absAngle = Math.abs(bb.angle);
+      const absOmega = Math.abs(bb.angularVelocity);
+      const sp = Math.hypot(bb.velocity.x, bb.velocity.y);
       const rf = relaxFactor();
-      for(const bb of active){
-        const stableUntil2 = bb.plugin?.stableUntil || 0;
-        if(now < stableUntil2) continue;
-        if(bb.plugin?.sealed) continue;
 
-        const absAngle = Math.abs(bb.angle);
-        const absOmega = Math.abs(bb.angularVelocity);
-        const sp = Math.hypot(bb.velocity.x, bb.velocity.y);
-
-        if(absAngle > COLLAPSE.angleRad * rf || absOmega > COLLAPSE.omega * rf || sp > COLLAPSE.speed * rf){
-          bad = true; break;
-        }
+      if(absAngle > COLLAPSE.angleRad * rf || absOmega > COLLAPSE.omega * rf || sp > COLLAPSE.speed * rf){
+        bad = true; break;
       }
     }
   }
@@ -1073,7 +1276,7 @@ function updateCollapseDetector(dt){
 }
 
 /* =========================
-   回合結束（新增）：collapse / timeout / win
+   回合結束
 ========================= */
 function endRound(reason, mode){
   if(state!=="running" && state!=="collapsing") return;
@@ -1084,27 +1287,23 @@ function endRound(reason, mode){
   spawnQueued = false;
   fallingBlock = null;
   pendingCommit = null;
-  if(currentCraneBlock){ World.remove(world,currentCraneBlock); currentCraneBlock=null; }
+  if(currentCraneBlock){ World.remove(world, currentCraneBlock); currentCraneBlock=null; }
 
-  // 計算本回合分數（結算時 level/score/totalPerfect 使用當下值）
   const rScore = computeRoundScore();
   roundScores[roundIndex-1] = rScore;
 
-  // timeout：不跑倒塌動畫，直接結算面板
   if(mode === "timeout"){
     state = "ended";
     showRoundSummaryUI({ mode, reason, roundScore: rScore });
     return;
   }
 
-  // win：直接結算面板（不走 collapsing）
   if(mode === "win"){
     state = "ended";
     showRoundSummaryUI({ mode, reason, roundScore: rScore });
     return;
   }
 
-  // collapse：保留 collapsing 動畫
   if(mode === "collapse"){
     state = "collapsing";
     showOverlayCollapsing(reason);
@@ -1134,68 +1333,54 @@ function endRound(reason, mode){
 function showRoundSummaryUI({ mode, reason, roundScore }){
   const isLast = (roundIndex === ROUND_COUNT);
 
-  // Round 1 / 2：不顯示榜單；按鈕 = 下一回合
   if(!isLast){
     const titleText = (mode === "win") ? "恭喜破關" : "遊戲結束";
     const subText = reason;
 
-    showOverlaySummaryCards({
+    showOverlaySummaryBase({
       titleText,
       subText,
-      k4Text: "ROUND SCORE",
-      v4Text: roundScore,
       buttonText: "下一回合",
       showLB: false,
-      lockBtn: false
+      isLastRound: false
     });
 
-    // Round2：顯示完本回合得分 → 動畫變累積分數，動畫結束前鎖按鈕
-    if(roundIndex === 2){
-      lockActionButton(true);
-      const from = roundScore;
-      const to = (roundScores[0] || 0) + (roundScores[1] || 0);
-      cumulativeScore = to;
-
-      animateRound2ToCumulative(from, to, ()=>{
-        lockActionButton(false);
-      });
-    }
+    runSummaryCountUp({
+      isLast: false,
+      roundScore,
+      totalScore: 0,
+      showCumulativeAfterRound2: (roundIndex === 2)
+    });
 
     return;
   }
 
-  // Round3：顯示總分 + 排行榜
   tsEnd = Date.now();
   const total = (roundScores[0]||0) + (roundScores[1]||0) + (roundScores[2]||0);
 
   const titleText = (mode === "win") ? "恭喜破關" : "遊戲結束";
   const subText = reason;
 
-  // 寫入 leaderboard（Run 紀錄）
-  const myEntry = {
-    runId,
-    playerId,
-    total,
-    tsEnd
-  };
+  const myEntry = { runId, playerId, total, tsEnd };
   const arr = addToLB(myEntry);
-  const rank = arr.findIndex(x=>x.runId===runId) + 1;
   renderLB(arr, runId);
 
-  showOverlaySummaryCards({
+  showOverlaySummaryBase({
     titleText,
     subText,
-    k4Text: "TOTAL",
-    v4Text: total,
     buttonText: "再玩一次",
     showLB: true,
-    lockBtn: false
+    isLastRound: true
+  });
+
+  runSummaryCountUp({
+    isLast: true,
+    roundScore: 0,
+    totalScore: total,
+    showCumulativeAfterRound2: false
   });
 }
 
-/* =========================
-   Game Over（改為走 endRound）
-========================= */
 function startGameOver(reason){
   if(state!=="running") return;
   endRound(reason, "collapse");
@@ -1223,7 +1408,7 @@ Events.on(engine,'beforeUpdate',()=>{
     const SPD_LVL_END = 61;
 
     const t = clamp01(level / SPD_LVL_END);
-    const te = t * t * (3 - 2 * t);;
+    const te = t * t * (3 - 2 * t);
     const speed = lerp(SPD_MIN, SPD_MAX, te);
 
     swingTime += speed;
@@ -1247,7 +1432,6 @@ Events.on(engine,'beforeUpdate',()=>{
     Body.setAngularVelocity(currentCraneBlock,0);
   }
 
-  // ✅ 時間到：不跑倒塌動畫（直接結算）
   if(level>0){
     timeLeft-=dt;
     updateTimerUI();
@@ -1286,7 +1470,7 @@ function updateVfx(dt){
 }
 
 /* =========================
-   Drawing helpers（原封不動）
+   Drawing helpers（保留你原本）
 ========================= */
 function drawRoundedQuad(ctx, pts, r){
   const n = pts.length;
@@ -1354,7 +1538,7 @@ function shadeHsl(hsl, dl){
 }
 
 /* =========================
-   Sky decor（原封不動）
+   Sky decor（保留你原本）
 ========================= */
 function seededRand(seed){
   let x = Math.sin(seed) * 10000;
@@ -1458,7 +1642,7 @@ function drawSkyDecor(ctx){
 }
 
 /* =========================
-   Render（原封不動）
+   Render（保留你原本 + 整段照舊）
 ========================= */
 Events.on(render,'afterRender',()=>{
   const ctx = render.context;
@@ -1631,7 +1815,7 @@ function saveLB(arr){
 function sortLB(arr){
   arr.sort((a,b)=>{
     if((b.total||0) !== (a.total||0)) return (b.total||0) - (a.total||0);
-    return (a.tsEnd||0) - (b.tsEnd||0); // 同分先完成者優先
+    return (a.tsEnd||0) - (b.tsEnd||0);
   });
   return arr;
 }
@@ -1676,74 +1860,6 @@ function renderLB(arr, highlightRunId){
 }
 
 /* =========================
-   Round 切換：清塔重玩（新增）
-========================= */
-function removeBodySafe(b){
-  if(!b) return;
-  try{ World.remove(world, b); }catch(e){}
-}
-function resetWorldForNewRound(){
-  // 清除 crane / falling / pending
-  if(currentCraneBlock){ removeBodySafe(currentCraneBlock); currentCraneBlock=null; }
-  if(fallingBlock){ removeBodySafe(fallingBlock); fallingBlock=null; }
-  if(pendingCommit?.body){ removeBodySafe(pendingCommit.body); }
-  pendingCommit = null;
-
-  // 清除 stacked blocks + glue constraints
-  while(stackedBlocks.length){
-    const b = stackedBlocks.pop();
-    if(b?.plugin?.glue) removeBodySafe(b.plugin.glue);
-    removeBodySafe(b);
-  }
-
-  // 清除特效殘留
-  particles.length = 0;
-  popups.length = 0;
-
-  // 重建 ground（確保上一回合 collapse 可能移除了 ground）
-  if(ground){ removeBodySafe(ground); ground=null; }
-  rebuildGround();
-
-  // 重置相機與背景（回到開局視覺）
-  initCamera();
-  setBackgroundForLevelSmooth(0);
-
-  // 重置時間戳相關
-  lastTimestamp = null;
-  collapseBadMs = 0;
-  swingTime = 0;
-}
-
-function startRound(idx){
-  roundIndex = idx;
-  roundTime = getRoundTime(roundIndex);
-
-  // 回合狀態重置
-  state = "running";
-  endReason = "";
-  score = 0;
-  level = 0;
-  combo = 0;          // streak
-  totalPerfect = 0;   // 累積 perfect 次數（結算用）
-  timeLeft = roundTime;
-
-  inputLock = false;
-  spawnQueued = false;
-
-  setRoundBadge();
-  measureUiBottom();
-  updateTimerUI();
-  updateUI();
-
-  // 關閉 overlay
-  overlay.classList.remove('show');
-  overlay.setAttribute('aria-hidden','true');
-
-  resetWorldForNewRound();
-  spawnBlock();
-}
-
-/* =========================
    Retry / Input / Resize
 ========================= */
 function onPrimaryButton(e){
@@ -1751,12 +1867,11 @@ function onPrimaryButton(e){
   e.stopPropagation();
 
   if(state !== "ended") return;
+  if(btnRetry.disabled) return;
 
   if(roundIndex < ROUND_COUNT){
-    // 下一回合
     startRound(roundIndex + 1);
   }else{
-    // 再玩一次：整場重置（保留 leaderboard）
     location.reload();
   }
 }
@@ -1795,7 +1910,94 @@ window.addEventListener('resize', ()=>{
   cameraTargetY = Math.min(cameraTargetY, t);
   currentScrollY = Math.min(currentScrollY, cameraTargetY);
   applyCamera();
+
+  if(overlay.classList.contains('show')) resizeFxCanvas();
 });
+
+/* =========================
+   Round 切換：清塔重玩
+========================= */
+function removeBodySafe(b){
+  if(!b) return;
+  try{ World.remove(world, b); }catch(e){}
+}
+function resetWorldForNewRound(){
+  if(currentCraneBlock){ removeBodySafe(currentCraneBlock); currentCraneBlock=null; }
+  if(fallingBlock){ removeBodySafe(fallingBlock); fallingBlock=null; }
+  if(pendingCommit?.body){ removeBodySafe(pendingCommit.body); }
+  pendingCommit = null;
+
+  while(stackedBlocks.length){
+    const b = stackedBlocks.pop();
+    if(b?.plugin?.glue) removeBodySafe(b.plugin.glue);
+    removeBodySafe(b);
+  }
+
+  particles.length = 0;
+  popups.length = 0;
+
+  if(ground){ removeBodySafe(ground); ground=null; }
+  rebuildGround();
+
+  initCamera();
+  setBackgroundForLevelSmooth(0);
+
+  lastTimestamp = null;
+  collapseBadMs = 0;
+  swingTime = 0;
+}
+
+function startRound(idx){
+  roundIndex = idx;
+  roundTime = getRoundTime(roundIndex);
+
+  state = "running";
+  endReason = "";
+  score = 0;
+  level = 0;
+  combo = 0;
+  totalPerfect = 0;
+  timeLeft = roundTime;
+
+  inputLock = false;
+  spawnQueued = false;
+
+  setRoundBadge();
+  measureUiBottom();
+  updateTimerUI();
+  updateUI();
+
+  overlay.classList.remove('show');
+  overlay.setAttribute('aria-hidden','true');
+
+  resetWorldForNewRound();
+  spawnBlock();
+}
+
+/* =========================
+   VFX helpers（遊戲內）
+========================= */
+function spawnParticles(x,y,count=18){
+  for(let i=0;i<count;i++){
+    const a=Math.random()*Math.PI*2;
+    const sp=1.8+Math.random()*3.6;
+    particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-1.6,life:0.5+Math.random()*0.35});
+  }
+}
+function addPopup(kind,text,x,y){
+  popups.push({kind,text,x,y,age:0,life:0.75,rise:-22});
+}
+function easeOutCubic(t){return 1-Math.pow(1-t,3);}
+function popupScale(t01){
+  if(t01<0.22){const u=t01/0.22;return 0.8+easeOutCubic(u)*0.7;}
+  if(t01<0.42){const u=(t01-0.22)/0.20;return 1.5-easeOutCubic(u)*0.5;}
+  return 1.0;
+}
+function popupAlpha(t01){
+  if(t01<0.55) return 1;
+  const u=(t01-0.55)/0.45;
+  return 1-easeOutCubic(clamp01(u));
+}
 
 /* =========================
    Boot
@@ -1803,14 +2005,19 @@ window.addEventListener('resize', ()=>{
 Render.run(render);
 Runner.run(Runner.create(), engine);
 
-// 初始化 Run 資料
 runId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
 tsStart = Date.now();
 
 setRoundBadge();
 measureUiBottom();
 
-// 開始第一回合
+timeLeft = roundTime;
+updateTimerUI();
+updateUI();
+setBackgroundForLevelSmooth(0);
+
+initCamera();
+spawnBlock();
 startRound(1);
 </script>
 </body>
