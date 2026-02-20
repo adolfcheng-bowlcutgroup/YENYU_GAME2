@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>建築大師V2.19</title>
+  <title>大羽建設(股)V2</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
   <style>
     body{
@@ -12,6 +12,29 @@
       touch-action:manipulation;
       transition: background 1.2s ease;
       background: linear-gradient(#87CEEB, #cfefff);
+    }
+
+    #login{
+      position:absolute; inset:0;
+      display:grid; place-items:center;
+      z-index:60;
+      opacity:0;
+      pointer-events:none;
+      transition: opacity 0.18s ease;
+    }
+
+    #login.show{ opacity:1; pointer-events:auto; }
+
+    #login .backdrop{ position:absolute; inset:0; background: rgba(0,0,0,0.62); backdrop-filter: blur(2px); }
+
+    #login .panel{
+      position:relative;
+      width:min(520px, 92vw);
+      border-radius: 18px;
+      padding: 18px;
+      border: 2px solid rgba(255,255,255,0.18);
+      background: rgba(0,0,0,0.30);
+      box-shadow: 0 16px 50px rgba(0,0,0,0.35);
     }
 
     #ui{
@@ -30,16 +53,13 @@
       gap:10px;
     }
 
-    /* Round 指示 */
-    #round-badge{
-      position:absolute;
-      right: 6px;
-      top: -10px;
-      z-index: 11;
-      pointer-events:none;
+    #hud-top{ 
+      display:flex; 
+      gap:10px; 
+      width:100%; 
+      box-sizing:border-box; 
     }
-
-    #hud-top{ display:flex; gap:10px; width:100%; box-sizing:border-box; }
+    
     .stat-card{
       flex: 1;
       background: rgba(0,0,0,0.28);
@@ -50,9 +70,10 @@
       min-width: 0;
       box-sizing: border-box;
     }
+
     .label{
-      font-size: 11px;
-      color: rgba(78,204,163,0.90);
+      font-size: 12px;
+      color: rgba(255,255,255,0.90);
       text-transform:uppercase;
       letter-spacing: 0.6px;
     }
@@ -62,7 +83,27 @@
       margin-top: 2px;
       text-shadow: 0 6px 18px rgba(0,0,0,0.25);
     }
-    #timer-card{ width:100%; }
+
+    /* ✅ Timer + Round HUD 包在同一行（Round 放在 TIME 左下處） */
+    #hud-bottom{
+      display:flex;
+      gap:10px;
+      align-items:stretch;
+      width:100%;
+      box-sizing:border-box;
+    }
+    #round-card{
+      width: 140px;
+      flex: 0 0 140px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+    }
+    #round-card .value{
+      font-size: 20px;
+    }
+
+    #timer-card{ flex: 1; }
     #timer-bar{
       width:100%;
       height:6px;
@@ -126,7 +167,7 @@
       font-size: 16px;
     }
 
-    /* ✅ Round3 的 TOTAL 大字（放在標題下方） */
+    /* ✅ Round3 TOTAL 大字 */
     #ov-total-big{
       display:none;
       margin: 6px 0 10px 0;
@@ -144,6 +185,29 @@
     }
     #ov-total-big .v{
       margin-top: 4px;
+      font-size: 70px;
+      font-weight: 900;
+      text-shadow: 0 0 18px rgba(255,255,255,0.22);
+    }
+
+    /* ✅ 結算主要大卡（Round1/2: ROUND SCORE；Round3: TOTAL） */
+    #ov-main-score{
+      display:none;
+      margin: 6px 0 10px 0;
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.20);
+      background: rgba(0,0,0,0.22);
+      text-align:center;
+    }
+    #ov-main-score .k{
+      font-size: 12px;
+      opacity: 0.80;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+    #ov-main-score .v{
+      margin-top: 4px;
       font-size: 44px;
       font-weight: 900;
       text-shadow: 0 0 18px rgba(255,255,255,0.22);
@@ -155,7 +219,7 @@
       grid-template-columns: 1fr 1fr;
       gap: 10px;
     }
-    /* ✅ Round3：LEVEL/SCORE/COMBO 三個並排 */
+    /* ✅ 結算下排三卡（LEVEL/SCORE/COMBO） */
     .summary.r3{
       grid-template-columns: 1fr 1fr 1fr;
     }
@@ -170,7 +234,6 @@
     .card .k{ font-size: 12px; color: rgba(255,255,255,0.75); text-transform: uppercase; letter-spacing: 0.8px; }
     .card .v{ margin-top: 4px; font-size: 26px; font-weight: 900; }
 
-    /* ✅ 卡片邊框閃一下 */
     @keyframes cardFlash {
       0%   { border-color: rgba(255,255,255,0.16); box-shadow: 0 0 0 rgba(0,0,0,0); }
       35%  { border-color: rgba(255,209,102,0.95); box-shadow: 0 0 22px rgba(255,209,102,0.35); }
@@ -179,9 +242,8 @@
     .flash-once{
       animation: cardFlash 0.52s ease-out 1;
     }
-
-    /* ✅ TOTAL 也閃一下（同感覺） */
-    #ov-total-big.flash-once{
+    #ov-total-big.flash-once,
+    #ov-main-score.flash-once{
       animation: cardFlash 0.58s ease-out 1;
     }
 
@@ -250,27 +312,77 @@
     }
     .lb-me{ background: rgba(78,204,163,0.20); border-radius: 10px; }
 
-    /* ✅ 面板內粒子 Canvas */
     #ov-fx{
       position:absolute;
       inset:0;
       pointer-events:none;
       display:none;
     }
+
+        /* ✅ Breakdown list */
+    #ov-breakdown{
+      margin: 8px 0 10px 0;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: rgba(0,0,0,0.18);
+    }
+    .bd-row{
+      display:flex;
+      justify-content:space-between;
+      align-items:baseline;
+      padding: 6px 4px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      opacity: 0.72;
+    }
+    .bd-row:last-child{ border-bottom:none; }
+
+    .bd-lbl{
+      font-size: 12px;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.82);
+    }
+    .bd-val{
+      font-size: 14px;
+      font-weight: 900;
+      color: rgba(255,209,102,0.95);
+      text-shadow: 0 0 14px rgba(255,209,102,0.22);
+    }
+
+    .bd-row.active{
+      opacity: 1;
+    }
+    .bd-row.active .bd-lbl{ color: rgba(255,255,255,0.95); }
+    .bd-row.active .bd-val{ color: rgba(255,209,102,1); }
+
+    /* ✅ flying ghost */
+    .ov-ghost{
+      position: fixed;
+      z-index: 9999;
+      pointer-events: none;
+      padding: 6px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.22);
+      background: rgba(0,0,0,0.35);
+      color: rgba(255,255,255,0.95);
+      font-weight: 900;
+      box-shadow: 0 14px 30px rgba(0,0,0,0.35);
+      backdrop-filter: blur(6px);
+      transform: translate(-50%, -50%);
+    }
   </style>
 </head>
 
 <body>
   <div id="ui">
-    <div id="round-badge" class="label">ROUND 1/3</div>
-
     <div id="hud-top">
       <div class="stat-card">
-        <div class="label">Score</div>
+        <div class="label">分數</div>
         <div id="score" class="value">0</div>
       </div>
       <div class="stat-card">
-        <div class="label">Level</div>
+        <div class="label">層數</div>
         <div id="level" class="value">0</div>
       </div>
       <div class="stat-card">
@@ -279,53 +391,146 @@
       </div>
     </div>
 
-    <div class="stat-card" id="timer-card">
-      <div class="label">Time</div>
-      <div id="timer-text" class="value">8.0</div>
-      <div id="timer-bar"><div id="timer-fill"></div></div>
+    <!-- ✅ TIME 下方改成一行：左 Round、右 Time -->
+    <div id="hud-bottom">
+      <div class="stat-card" id="round-card">
+        <div class="label">目前回合</div>
+        <div id="round-text" class="value">1/3</div>
+      </div>
+
+      <div class="stat-card" id="timer-card">
+        <div class="label">時間</div>
+        <div id="timer-text" class="value">8.0</div>
+        <div id="timer-bar"><div id="timer-fill"></div></div>
+      </div>
     </div>
   </div>
 
-  <div id="overlay" aria-hidden="true">
+  <div id="login" class="show" aria-hidden="false">
     <div class="backdrop"></div>
-    <div class="panel" role="dialog" aria-modal="true" id="ov-panel">
-      <canvas id="ov-fx"></canvas>
+    <div class="panel" role="dialog" aria-modal="true">
+      <h1 style="margin:2px 0 8px 0;font-size:40px;font-weight:900;color:#fff;">輸入玩家ID</h1>
+      <p style="margin:0 0 10px 0;color:rgba(255,255,255,0.9);">限 6 個中文字</p>
 
-      <h1 id="ov-title">建築物倒塌</h1>
-      <p id="ov-sub">正在崩塌中…</p>
+      <input id="player-id-input" maxlength="6"
+        style="width:100%;box-sizing:border-box;border-radius:14px;padding:12px 14px;border:1px solid rgba(255,255,255,0.25);background:rgba(0,0,0,0.25);color:#fff;font-size:18px;font-weight:900;outline:none;"
+        placeholder="例如：大羽建設" />
 
-      <div id="ov-total-big">
-        <div class="k">TOTAL</div>
-        <div class="v" id="ov-total-big-v">0</div>
-      </div>
+      <div id="login-err" style="margin-top:8px;color:#ffb3c1;font-weight:900;min-height:22px;"></div>
 
-      <div class="summary" id="ov-summary" style="display:none;">
-        <div class="card" id="ov-card-1"><div class="k" id="ov-k1">LEVEL</div><div class="v" id="ov-height">0</div></div>
-        <div class="card" id="ov-card-2"><div class="k" id="ov-k2">Score</div><div class="v" id="ov-score">0</div></div>
-        <div class="card" id="ov-card-3"><div class="k" id="ov-k3">Combo</div><div class="v" id="ov-combo">0</div></div>
-        <div class="card" id="ov-card-4"><div class="k" id="ov-k4">ROUND SCORE</div><div class="v" id="ov-rank">-</div></div>
-      </div>
-
-      <div class="actions" id="ov-actions" style="display:none;">
-        <button id="btn-retry" type="button">再玩一次</button>
-      </div>
-
-      <div class="leaderboard" id="lb-wrap" style="display:none;">
-        <div class="lb-title">排行榜（本機）</div>
-        <div class="lb-sub" id="lb-sub">排序：總分（同分先完成者優先）</div>
-        <div class="lb-scroll" id="lb-scroll" role="region" aria-label="leaderboard">
-          <div class="lb-row lb-head" id="lb-head"><div>#</div><div>玩家ID</div><div>總分</div></div>
-          <div id="lb-list"></div>
-        </div>
-      </div>
-
+      <button id="btn-login" type="button" style="width:100%;margin-top:8px;">進入遊戲</button>
     </div>
+</div>
+
+  <div id="overlay" aria-hidden="true" inert>
+      <div class="backdrop"></div>
+      <div class="panel" role="dialog" aria-modal="true" id="ov-panel">
+        <canvas id="ov-fx"></canvas>
+
+        <h1 id="ov-title">建築物倒塌</h1>
+        <p id="ov-sub">正在崩塌中…</p>
+
+        <!-- ✅ Round1/2 用 ROUND SCORE；Round3 保留 TOTAL 另區塊 -->
+        <div id="ov-main-score">
+          <div class="k" id="ov-main-k">ROUND SCORE</div>
+          <div class="v" id="ov-main-v">0</div>
+        </div>
+
+        <div id="ov-total-big">
+          <div class="k">本次遊戲總分</div>
+          <div class="v" id="ov-total-big-v">0</div>
+        </div>
+
+        <!-- ✅ 加權拆解（LEVEL/SCORE/COMBO 的貢獻） -->
+        <div id="ov-breakdown" style="display:none;">
+          <div class="bd-row" id="bd-row-1">
+            <span class="bd-lbl" id="bd-lbl-1">層數 × 100</span>
+            <span class="bd-val" id="bd-val-1">+0</span>
+          </div>
+          <div class="bd-row" id="bd-row-2">
+            <span class="bd-lbl" id="bd-lbl-2">分數 × 5</span>
+            <span class="bd-val" id="bd-val-2">+0</span>
+          </div>
+          <div class="bd-row" id="bd-row-3">
+            <span class="bd-lbl" id="bd-lbl-3">累積COMBO數 × 50</span>
+            <span class="bd-val" id="bd-val-3">+0</span>
+          </div>
+        </div>
+
+        <!-- ✅ 結算下排三卡：LEVEL / SCORE / COMBO（Round1/2/3 全都用這排） -->
+        <div class="summary r3" id="ov-summary" style="display:none;">
+          <div class="card" id="ov-card-1"><div class="k">層數</div><div class="v" id="ov-height">0</div></div>
+          <div class="card" id="ov-card-2"><div class="k">分數</div><div class="v" id="ov-score">0</div></div>
+          <div class="card" id="ov-card-3"><div class="k">累積COMBO</div><div class="v" id="ov-combo">0</div></div>
+        </div>
+
+        <div class="actions" id="ov-actions" style="display:none;">
+          <button id="btn-retry" type="button">再玩一次</button>
+        </div>
+
+        <div class="leaderboard" id="lb-wrap" style="display:none;">
+          <div class="lb-title">排行榜</div>
+          <div class="lb-sub" id="lb-sub">排序：總分（同分先完成者優先）</div>
+          <div class="lb-scroll" id="lb-scroll" role="region" aria-label="leaderboard">
+            <div class="lb-row lb-head"><div>#</div><div>玩家ID</div><div>總分</div></div>
+            <div id="lb-list"></div>
+          </div>
+        </div>
+
+      </div>
   </div>
 
   <div id="game-viewport"></div>
 
-<script>
+<script type="module">
+
+// 🔥 先 import Firebase
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
+import {
+  getFirestore, collection, addDoc, serverTimestamp,
+  query, orderBy, limit, getDocs
+} from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
+
+// Firebase 初始化
+const firebaseConfig = {
+  apiKey: "AIzaSyASYxPS3KfIF9khcMwukfxYdVosdN7Qj_Y",
+  authDomain: "game-buildhouse.firebaseapp.com",
+  projectId: "game-buildhouse",
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+try {
+  await signInAnonymously(auth);
+} catch (e) {
+  console.error("Anonymous auth failed. Did you enable it in Firebase Console?", e);
+}
+
+// 如果你後面要用
+window.__db = db;
+window.__auth = auth;
+
 const { Engine, Render, Runner, World, Bodies, Body, Events, Constraint } = Matter;
+
+/* =========================
+   Firestore helpers（⭐這裡）
+========================= */
+async function fetchTopScores(){
+  const db = window.__db;
+  if(!db) return [];
+
+  const q = query(
+    collection(db, "leaderboard"),
+    orderBy("total", "desc"),
+    orderBy("tsEnd", "asc"),
+    limit(30)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => d.data());
+}
 
 /* =========================
    Engine / Render
@@ -355,6 +560,10 @@ Render.setPixelRatio(render, window.devicePixelRatio || 1);
 /* =========================
    UI refs
 ========================= */
+const login = document.getElementById('login');
+const idInput = document.getElementById('player-id-input');
+const loginErr = document.getElementById('login-err');
+const btnLogin = document.getElementById('btn-login');
 const overlay = document.getElementById('overlay');
 const ovTitle = document.getElementById('ov-title');
 const ovSub = document.getElementById('ov-sub');
@@ -362,26 +571,49 @@ const ovSummary = document.getElementById('ov-summary');
 const ovHeight = document.getElementById('ov-height');
 const ovScore = document.getElementById('ov-score');
 const ovCombo = document.getElementById('ov-combo');
-const ovRank  = document.getElementById('ov-rank');
 const ovActions = document.getElementById('ov-actions');
 const btnRetry = document.getElementById('btn-retry');
 const timerCard = document.getElementById('timer-card');
-const roundBadge = document.getElementById('round-badge');
 
-const ovK1 = document.getElementById('ov-k1');
-const ovK2 = document.getElementById('ov-k2');
-const ovK3 = document.getElementById('ov-k3');
-const ovK4 = document.getElementById('ov-k4');
+const roundText = document.getElementById('round-text');
 
 const ovPanel = document.getElementById('ov-panel');
 const ovTotalBig = document.getElementById('ov-total-big');
 const ovTotalBigV = document.getElementById('ov-total-big-v');
+const ovMainScore = document.getElementById('ov-main-score');
+const ovMainK = document.getElementById('ov-main-k');
+const ovMainV = document.getElementById('ov-main-v');
+
 const ovCard1 = document.getElementById('ov-card-1');
 const ovCard2 = document.getElementById('ov-card-2');
 const ovCard3 = document.getElementById('ov-card-3');
-const ovCard4 = document.getElementById('ov-card-4');
 
 const ovFx = document.getElementById('ov-fx');
+
+// ✅ breakdown refs
+const ovBreakdown = document.getElementById('ov-breakdown');
+const bdRow1 = document.getElementById('bd-row-1');
+const bdRow2 = document.getElementById('bd-row-2');
+const bdRow3 = document.getElementById('bd-row-3');
+const bdVal1 = document.getElementById('bd-val-1');
+const bdVal2 = document.getElementById('bd-val-2');
+const bdVal3 = document.getElementById('bd-val-3');
+
+/* =========================
+   Login Validation
+========================= */
+
+function isCjkHan(str){
+  return /^[\u4E00-\u9FFF]+$/.test(str);
+}
+
+function validatePlayerId(raw){
+  const s = (raw || "").trim();
+  if(!s) return { ok:false, msg:"請輸入ID" };
+  if(s.length > 6) return { ok:false, msg:"最多 6 個字" };
+  if(!isCjkHan(s)) return { ok:false, msg:"只能輸入中文字" };
+  return { ok:true, id:s };
+}
 
 /* =========================
    三回合賽制
@@ -399,8 +631,8 @@ let tsEnd = 0;
 let roundScores = [0,0,0];
 let totalPerfect = 0;
 
-function setRoundBadge(){
-  if(roundBadge) roundBadge.textContent = `ROUND ${roundIndex}/${ROUND_COUNT}`;
+function setRoundHUD(){
+  if(roundText) roundText.textContent = `${roundIndex}/${ROUND_COUNT}`;
 }
 function getRoundTime(idx){ return ROUND_TIMES[Math.max(1, Math.min(ROUND_COUNT, idx)) - 1]; }
 function computeRoundScore(){
@@ -412,18 +644,17 @@ function lockActionButton(lock){
 }
 
 /* =========================
-   ✅ 卡片閃一下（新增）
+   Flash helper
 ========================= */
 function flashOnce(el){
   if(!el) return;
   el.classList.remove('flash-once');
-  // force reflow
   void el.offsetWidth;
   el.classList.add('flash-once');
 }
 
 /* =========================
-   ✅ 結算數字跑動（新增）
+   Count up helper
 ========================= */
 function animateNumber(el, from, to, durMs){
   return new Promise((resolve)=>{
@@ -444,73 +675,8 @@ function animateNumber(el, from, to, durMs){
   });
 }
 
-async function runSummaryCountUp({ isLast, roundScore, totalScore, showCumulativeAfterRound2 }){
-  lockActionButton(true);
-
-  if(isLast){
-    ovTotalBigV.textContent = "0";
-    await animateNumber(ovTotalBigV, 0, totalScore, 880);
-    flashOnce(ovTotalBig);                 // ✅ Round3 TOTAL 跑完閃一下
-    startOverlayParticlesBurst(2);         // ✅ 粒子型「煙火」
-    await new Promise(r=>setTimeout(r, 90));
-
-    ovHeight.textContent = "0";
-    ovScore.textContent = "0";
-    ovCombo.textContent = "0";
-
-    await animateNumber(ovHeight, 0, level, 420);
-    flashOnce(ovCard1);
-
-    await animateNumber(ovScore, 0, score, 520);
-    flashOnce(ovCard2);
-
-    await animateNumber(ovCombo, 0, totalPerfect, 460);
-    flashOnce(ovCard3);
-
-    lockActionButton(false);
-    return;
-  }
-
-  ovHeight.textContent = "0";
-  ovScore.textContent = "0";
-  ovCombo.textContent = "0";
-  ovRank.textContent  = "0";
-
-  await animateNumber(ovHeight, 0, level, 420);
-  flashOnce(ovCard1);
-
-  await animateNumber(ovScore, 0, score, 520);
-  flashOnce(ovCard2);
-
-  await animateNumber(ovCombo, 0, totalPerfect, 460);
-  flashOnce(ovCard3);
-
-  await animateNumber(ovRank, 0, roundScore, 720);
-  flashOnce(ovCard4);
-
-  // ✅ ROUND SCORE 結算完噴粒子
-  startOverlayParticlesBurst(2);
-
-  if(showCumulativeAfterRound2){
-    await new Promise(r=>setTimeout(r, 220));
-
-    const from = roundScore;
-    const to = (roundScores[0]||0) + (roundScores[1]||0);
-
-    ovK4.textContent = "CUMULATIVE";
-    ovRank.textContent = String(from);
-
-    await animateNumber(ovRank, from, to, 820);
-    flashOnce(ovCard4);
-  }
-
-  lockActionButton(false);
-}
-
 /* =========================
-   ✅ 面板內「蓋房子那種粒子」煙火（改版）
-   - 乾淨點狀粒子（同你遊戲內粒子風格）
-   - 無拖尾、無疊色，重力下落淡出
+   Overlay FX (clean particles)
 ========================= */
 let fxRAF = 0;
 let fxParticles = [];
@@ -524,7 +690,6 @@ function resizeFxCanvas(){
   ovFx.style.width = r.width + "px";
   ovFx.style.height = r.height + "px";
 }
-
 function spawnFxBurst(){
   const dpr = (window.devicePixelRatio||1);
   const w = ovFx.width, h = ovFx.height;
@@ -532,20 +697,19 @@ function spawnFxBurst(){
   const cx = w * (0.35 + Math.random()*0.30);
   const cy = h * (0.22 + Math.random()*0.22);
 
-  const count = 26 + Math.floor(Math.random()*14);
+  const count = 26 + Math.floor(Math.random()*22); // 粒子更多
   for(let i=0;i<count;i++){
     const a = Math.random() * Math.PI * 2;
-    const sp = (1.8 + Math.random()*3.6) * dpr * 0.35; // ✅ 對齊遊戲內粒子速度手感
+    const sp = (2.4 + Math.random()*5.2) * dpr * 0.4; // 噴更快、更擴散
     fxParticles.push({
       x: cx, y: cy,
       vx: Math.cos(a)*sp,
       vy: Math.sin(a)*sp - 1.6*dpr*0.35,
       life: 0.5 + Math.random()*0.35,
-      r: 2.0 * dpr * 0.65
+      r: 2.4 * dpr * 0.75  // 粒子更大顆
     });
   }
 }
-
 function startOverlayParticlesBurst(bursts=2){
   if(!ovFx) return;
 
@@ -567,7 +731,6 @@ function startOverlayParticlesBurst(bursts=2){
     const dt = Math.min(0.033, (now - last)/1000);
     last = now;
 
-    // ✅ 乾淨：每幀清空，不做拖尾
     ctx.clearRect(0,0,ovFx.width,ovFx.height);
 
     for(let i=fxParticles.length-1;i>=0;i--){
@@ -575,7 +738,6 @@ function startOverlayParticlesBurst(bursts=2){
       p.life -= dt;
       if(p.life <= 0){ fxParticles.splice(i,1); continue; }
 
-      // ✅ 對齊遊戲內粒子：vy += 8*dt
       p.vy += 8 * dt * dpr * 0.35;
 
       p.x += p.vx;
@@ -607,8 +769,182 @@ function startOverlayParticlesBurst(bursts=2){
   fxRAF = requestAnimationFrame(tick);
 }
 
+    function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+    function resetBreakdown(){
+      if(!ovBreakdown) return;
+      ovBreakdown.style.display = "block";
+      if(bdVal1) bdVal1.textContent = "+0";
+      if(bdVal2) bdVal2.textContent = "+0";
+      if(bdVal3) bdVal3.textContent = "+0";
+      if(bdRow1) bdRow1.classList.remove('active');
+      if(bdRow2) bdRow2.classList.remove('active');
+      if(bdRow3) bdRow3.classList.remove('active');
+    }
+
+    function setActiveRow(rowEl){
+      if(bdRow1) bdRow1.classList.remove('active');
+      if(bdRow2) bdRow2.classList.remove('active');
+      if(bdRow3) bdRow3.classList.remove('active');
+      if(rowEl) rowEl.classList.add('active');
+    }
+
+    // ✅ "+1234" 跑動（含正負，但你這裡都正）
+    function animatePlus(el, from, to, durMs){
+      return new Promise((resolve)=>{
+        const start = performance.now();
+        const a = Number(from) || 0;
+        const b = Number(to) || 0;
+        const D = Math.max(160, durMs|0);
+
+        function step(now){
+          const t = Math.min(1, (now - start) / D);
+          const te = t*t*(3-2*t);
+          const v = Math.round(a + (b - a) * te);
+          el.textContent = `+${v}`;
+          if(t < 1) requestAnimationFrame(step);
+          else resolve();
+        }
+        requestAnimationFrame(step);
+      });
+    }
+
+    // ✅ ghost 從 fromEl 飛到 toEl
+    function flyGhost(fromEl, toEl, text){
+      return new Promise((resolve)=>{
+        if(!fromEl || !toEl){
+          resolve();
+          return;
+        }
+        const fr = fromEl.getBoundingClientRect();
+        const tr = toEl.getBoundingClientRect();
+
+        const ghost = document.createElement('div');
+        ghost.className = "ov-ghost";
+        ghost.textContent = text;
+
+        // 起點：fromEl 中心
+        ghost.style.left = (fr.left + fr.width/2) + "px";
+        ghost.style.top  = (fr.top  + fr.height/2) + "px";
+        ghost.style.opacity = "1";
+        ghost.style.transition = "transform 320ms cubic-bezier(.2,.9,.2,1), opacity 320ms ease";
+
+        document.body.appendChild(ghost);
+
+        // 下一幀再移動到終點
+        requestAnimationFrame(()=>{
+          const dx = (tr.left + tr.width/2) - (fr.left + fr.width/2);
+          const dy = (tr.top  + tr.height/2) - (fr.top  + fr.height/2);
+          ghost.style.transform = `translate(${dx}px, ${dy}px) scale(0.86)`;
+          ghost.style.opacity = "0.92";
+        });
+
+        setTimeout(()=>{
+          ghost.remove();
+          resolve();
+        }, 340);
+      });
+    }
+
 /* =========================
-   Tunables
+   ✅ 結算跑動：Round1/2 主卡是 ROUND SCORE；Round3 主卡是 TOTAL
+   - Round1/2：ROUND SCORE -> flash + particles；再跑 LEVEL/SCORE/COMBO 三卡（每卡結束 flash）
+   - Round2：最後把 ROUND SCORE label 換成 CUMULATIVE，數字從本回合 -> 累積（原規格保留）
+   - Round3：TOTAL 走 ov-total-big（保留你要的「標題下方」），跑完 flash
+========================= */
+async function runSummaryCountUp({ isLast, roundScore, totalScore, showCumulativeAfterRound2 }){
+  lockActionButton(true);
+
+  // ✅ 三卡直接顯示最終值（不跑動）
+  ovHeight.textContent = String(level);
+  ovScore.textContent  = String(score);
+  ovCombo.textContent  = String(totalPerfect);
+
+  // ✅ breakdown reset / show
+  resetBreakdown();
+
+  // ✅ 選目標：Round1/2 用 ovMainV；Round3 用 ovTotalBigV
+  const targetV = isLast ? ovTotalBigV : ovMainV;
+  const targetWrap = isLast ? ovTotalBig : ovMainScore; // 用來 flash
+  if(targetV) targetV.textContent = "0";
+
+  // ✅ 先把 breakdown 值歸零，主分數也從 0 開始跑累加
+  let running = 0;
+  const vLevel = level;
+  const vScore = score;
+  const vCombo = totalPerfect;
+
+  const c1 = vLevel * 100;
+  const c2 = vScore * 5;
+  const c3 = vCombo * 50;
+  const final = isLast ? totalScore : roundScore; // roundScore 你外面已算好
+
+  // ⚠️ 保險：如果 roundScore/totalScore 不是由這三項構成（未來你加別項），這裡以傳入值為準
+  // 但跑動仍用 c1/c2/c3 累加；最後強制把主分數矯正到 final。
+  async function applyPart({ fromEl, rowEl, bdEl, contrib }){
+    setActiveRow(rowEl);
+
+    // 1) ghost 飛
+    await flyGhost(fromEl, targetV, String(fromEl.textContent || ""));
+
+    // 2) breakdown 行 +xxxx 跑動
+    if(bdEl) bdEl.textContent = "+0";
+
+    const prevRunning = running;
+    const nextRunning = running + contrib;
+
+    // breakdown + 主分數 同步跑動（主分數顯示累加中）
+    await Promise.all([
+      bdEl ? animatePlus(bdEl, 0, contrib, 520) : Promise.resolve(),
+      targetV ? animateNumber(targetV, prevRunning, nextRunning, 520) : Promise.resolve()
+    ]);
+
+    running = nextRunning;
+
+    // 小停頓 + flash 一下該行（用你現成卡片 flash 也行，但這裡只亮 row）
+    await sleep(90);
+  }
+
+  // ✅ 依序：LEVEL → SCORE → COMBO
+  await applyPart({ fromEl: ovHeight, rowEl: bdRow1, bdEl: bdVal1, contrib: c1 });
+  await applyPart({ fromEl: ovScore,  rowEl: bdRow2, bdEl: bdVal2, contrib: c2 });
+  await applyPart({ fromEl: ovCombo,  rowEl: bdRow3, bdEl: bdVal3, contrib: c3 });
+
+  // ✅ 最終矯正到 roundScore / totalScore（避免未來加項或四捨五入造成差）
+  if(targetV && running !== final){
+    await animateNumber(targetV, running, final, 320);
+    running = final;
+  }
+
+  // ✅ 完成：flash + 粒子 burst（你要的）
+  flashOnce(targetWrap);
+  startOverlayParticlesBurst(3);
+  await sleep(120);
+
+  // ✅ Round2：做 cumulative 過場（原規格保留）
+  if(!isLast && showCumulativeAfterRound2){
+    await sleep(220);
+
+    const from = final; // Round2 的 roundScore
+    const to = (roundScores[0]||0) + (roundScores[1]||0);
+
+    ovMainK.textContent = "累積分數";
+
+    // 這段不需要 breakdown 再跑；你要的是「文字動畫變成累積分」
+    setActiveRow(null);
+    if(ovBreakdown) ovBreakdown.style.display = "none";
+
+    ovMainV.textContent = String(from);
+    await animateNumber(ovMainV, from, to, 880);
+
+    flashOnce(ovMainScore);
+  }
+
+  lockActionButton(false);
+}
+
+/* =========================
+   Tunables / game (保留你原本)
 ========================= */
 function relaxFactor(){
   const tRaw = (level - 10) / 51;
@@ -616,8 +952,15 @@ function relaxFactor(){
   const te = t * t * (3 - 2 * t);
   return 1.0 + 0.25 * te;
 }
-
 const MAX_LEVEL = 61;
+
+const BASE_ANCHOR = {
+  friction: 2.2,
+  frictionStatic: 3.6,
+  frictionAir: 0.12,
+  angDamp: 0.55,   // 角速度再砍一點
+  velXDamp: 0.25   // X 速度砍一點（防止慢慢滑）
+};
 
 const MATERIAL = {
   restitution: 0.00,
@@ -790,6 +1133,11 @@ let cranePivotX = 0;
 let cranePivotY = 0;
 
 let state = "running";
+let didFirstLandFX = false;
+// camera shake
+let shakeMs = 0;
+let shakeAmp = 0;
+let shakeT = 0;
 let endReason = "";
 let score = 0, level = 0, combo = 0, timeLeft = 0;
 let inputLock = false;
@@ -832,10 +1180,19 @@ function computeCameraTargetFromSafeTop(){
 
 function applyCamera(){
   const y = Math.max(0, Math.min(WORLD_HEIGHT - viewH, currentScrollY));
-  render.bounds.min.x = 0;
-  render.bounds.max.x = viewW;
-  render.bounds.min.y = y;
-  render.bounds.max.y = y + viewH;
+
+  // shake offset（只影響遊戲畫面，不動 UI）
+  let ox = 0, oy = 0;
+  if(shakeMs > 0){
+    // 小幅、快速、衰減
+    ox = (Math.random()*2-1) * shakeAmp;
+    oy = (Math.random()*2-1) * shakeAmp * 0.6;
+  }
+
+  render.bounds.min.x = 0 + ox;
+  render.bounds.max.x = viewW + ox;
+  render.bounds.min.y = y + oy;
+  render.bounds.max.y = y + viewH + oy;
 }
 
 function initCamera(){
@@ -857,8 +1214,14 @@ function updateCamera(){
   applyCamera();
 }
 
+function startShake(ms=180, amp=6){
+  shakeMs = ms;
+  shakeAmp = amp;
+  shakeT = 0;
+}
+
 /* =========================
-   Background smooth
+   Background
 ========================= */
 function lerp(a,b,t){ return a + (b-a)*t; }
 function clamp01(x){ return Math.max(0, Math.min(1, x)); }
@@ -881,7 +1244,30 @@ const BG_STOPS = [
   { lvl: 32, top:"#0c0c18", bottom:"#0e2a45" },
   { lvl: 40, top:"#050505", bottom:"#0b1a2e" }
 ];
+
+// ✅ Round 背景主題：1=原本依 level、2=黃昏、3=夜晚星空
+let bgTheme = "level"; // "level" | "dusk" | "night"
+
+function applyRoundBackground(){
+  if(roundIndex === 2){
+    bgTheme = "dusk";
+    // 黃昏：橘紫到深藍
+    document.body.style.background = "linear-gradient(#ffb56b, #6a4c93, #1b2a49)";
+  }else if(roundIndex === 3){
+    bgTheme = "night";
+    // 夜晚：深藍到更深
+    document.body.style.background = "linear-gradient(#050b2e, #020517)";
+  }else{
+    bgTheme = "level";
+    // Round1 照你原本的 level 動態背景
+    setBackgroundForLevelSmooth(level);
+  }
+}
+
 function setBackgroundForLevelSmooth(lvl){
+  // ✅ Round2/3 固定背景，不要被 level 變動覆蓋
+  if(bgTheme !== "level") return;
+
   let i = 0;
   while(i < BG_STOPS.length-1 && lvl > BG_STOPS[i+1].lvl) i++;
   const a = BG_STOPS[i];
@@ -894,7 +1280,7 @@ function setBackgroundForLevelSmooth(lvl){
 }
 
 /* =========================
-   UI helpers
+   UI
 ========================= */
 function updateUI(){
   document.getElementById('score').innerText = score;
@@ -914,43 +1300,39 @@ function updateTimerUI(){
 
 function showOverlayCollapsing(reasonText){
   overlay.classList.add('show');
+  overlay.removeAttribute('inert'); 
   overlay.setAttribute('aria-hidden','false');
   ovTitle.textContent = "建築物倒塌";
   ovSub.textContent = reasonText + "（崩塌中…）";
   ovSummary.style.display = "none";
   ovActions.style.display = "none";
   if(ovTotalBig) ovTotalBig.style.display = "none";
-  ovSummary.classList.remove('r3');
-  if(ovCard4) ovCard4.style.display = "block";
+  if(ovMainScore) ovMainScore.style.display = "none";
   const lb = document.getElementById('lb-wrap');
   if(lb) lb.style.display = "none";
 }
 
 function showOverlaySummaryBase({ titleText, subText, buttonText, showLB, isLastRound }){
   overlay.classList.add('show');
+  overlay.removeAttribute('inert');
   overlay.setAttribute('aria-hidden','false');
 
   ovTitle.textContent = titleText;
   ovSub.textContent = subText;
-
-  ovK1.textContent = "LEVEL";
-  ovK2.textContent = "SCORE";
-  ovK3.textContent = "COMBO";
 
   btnRetry.textContent = buttonText;
 
   ovSummary.style.display = "grid";
   ovActions.style.display = "block";
 
+  // ✅ Round1/2 也改成「主卡在上 + 三卡在下」
   if(isLastRound){
+    if(ovMainScore) ovMainScore.style.display = "none";
     if(ovTotalBig) ovTotalBig.style.display = "block";
-    ovSummary.classList.add('r3');
-    if(ovCard4) ovCard4.style.display = "none";
   }else{
     if(ovTotalBig) ovTotalBig.style.display = "none";
-    ovSummary.classList.remove('r3');
-    if(ovCard4) ovCard4.style.display = "block";
-    ovK4.textContent = "ROUND SCORE";
+    if(ovMainScore) ovMainScore.style.display = "block";
+    ovMainK.textContent = "本回合分數";
   }
 
   const lb = document.getElementById('lb-wrap');
@@ -964,6 +1346,10 @@ function showOverlaySummaryBase({ titleText, subText, buttonText, showLB, isLast
     const ctx = ovFx.getContext('2d');
     if(ctx) ctx.clearRect(0,0,ovFx.width,ovFx.height);
   }
+
+  // ✅ breakdown 預設顯示（runSummaryCountUp 會 reset/隱藏）
+  if(ovBreakdown) ovBreakdown.style.display = "block";
+
 }
 
 /* =========================
@@ -1063,14 +1449,23 @@ function stabilizeOnLanding(body){
 }
 
 function beginPendingCommit(body, landedOn){
+  // ✅ 第一塊落地：碰撞當下就觸發 FX（立刻）
+  const isFirstLanding = (level === 0);
+  
+  if(isFirstLanding && !didFirstLandFX){
+    didFirstLandFX = true;
+    reinforceBase(body);
+    spawnParticles(body.position.x, body.position.y, 34);
+    startShake(180, 7);
+  } 
+
   const base = landedOn || (stackedBlocks.length>0 ? stackedBlocks[stackedBlocks.length-1] : ground);
 
   const diff = Math.abs(body.position.x - base.position.x);
   const w = (body.bounds.max.x - body.bounds.min.x);
 
-  if(diff > w*0.85){ startGameOver("房子傾倒了！"); return; }
+  if(diff > w*0.85){ startGameOver("連續COMBO，分數會更高！"); return; }
 
-  const isFirstLanding = (level === 0);
   if(!isFirstLanding){
     const perfect = diff < w*0.05;
     if(perfect){
@@ -1127,79 +1522,83 @@ function updatePendingCommit(nowTs){
   }
 }
 
-function commitSuccess(){
-  if(!pendingCommit || state!=="running") return;
+  function commitSuccess(){
+    if(!pendingCommit || state!=="running") return;
 
-  const { body, diff, w, base } = pendingCommit;
+    const { body, diff, w, base } = pendingCommit;
 
-  if (base && base !== ground) {
-    const glue = Constraint.create({
-      bodyA: body,
-      bodyB: base,
-      pointA: { x: 0, y: 0 },
-      pointB: { x: 0, y: 0 },
-      stiffness: 0.18,
-      damping: 0.12
-    });
-    World.add(world, glue);
+    //（如果你原本有 glue / constraint 的段落，放這裡）
+    if (base && base !== ground) {
+      const glue = Constraint.create({
+        bodyA: body,
+        bodyB: base,
+        pointA: { x: 0, y: 0 },
+        pointB: { x: 0, y: 0 },
+        stiffness: 0.18,
+        damping: 0.12
+      });
+      World.add(world, glue);
 
-    body.plugin = body.plugin || {};
-    body.plugin.glue = glue;
-  }
+      body.plugin = body.plugin || {};
+      body.plugin.glue = glue;
+    }
 
-  const isFirstLanding = (level === 0);
+    const isFirstLanding = (level === 0);
 
-  const segPrev = segmentIdForLevel(level);
-  level++;
-  const segNow = segmentIdForLevel(level);
+    const segPrev = segmentIdForLevel(level);
+    level++;
+    const segNow = segmentIdForLevel(level);
 
-  if(level >= MAX_LEVEL){
-    stackedBlocks.push(body);
-    pendingCommit = null;
-    updateUI();
-    endRound("破關！", "win");
-    return;
-  }
+    // ✅ 即時加分（補回 v2.19）
+    if(!isFirstLanding){
+      const perfect = diff < w*0.05;
+      if(perfect){
+        combo++;
+        score += 10 + (combo * 25);
+        totalPerfect++;
+      }else{
+        combo = 0;
+        score += 10;
+      }
 
-  if(!isFirstLanding){
-    const perfect = diff < w*0.05;
-    if(perfect){
-      combo++;
-      score += 10 + (combo*25);
-      totalPerfect++;
+      const nowGlow = engine.timing.timestamp;
+      body.plugin = body.plugin || {};
+      body.plugin.glowUntil = nowGlow + (perfect ? 520 : 320);
     }else{
       combo = 0;
-      score += 10;
     }
-    const now=engine.timing.timestamp;
-    body.plugin = body.plugin || {};
-    body.plugin.glowUntil = now + (perfect ? 520 : 320);
-  }else{
-    combo = 0;
-  }
 
-  const now = engine.timing.timestamp;
-  body.plugin = body.plugin || {};
-  body.plugin.stableUntil = now + 420;
+    // 破關判定
+    if(level >= MAX_LEVEL){
+      stackedBlocks.push(body);
+      pendingCommit = null;
+      updateUI();
+      endRound("破關！", "win");
+      return;
+    }
 
-  stackedBlocks.push(body);
+      const now = engine.timing.timestamp;
+      body.plugin = body.plugin || {};
+      body.plugin.stableUntil = now + 420;
 
-  if(segNow !== segPrev) sealOldSegment();
+      stackedBlocks.push(body);
 
-  timeLeft = roundTime;
-  updateTimerUI();
-  setBackgroundForLevelSmooth(level);
-  updateUI();
+      if(segNow !== segPrev) sealOldSegment();
 
-  pendingCommit = null;
+      timeLeft = roundTime;
+      updateTimerUI();
+      setBackgroundForLevelSmooth(level);
+      updateUI();
 
-  inputLock = false;
-  spawnQueued = true;
-  setTimeout(()=>{
-    spawnQueued = false;
-    if(state==="running") spawnBlock();
-  }, 140);
-}
+      pendingCommit = null;
+
+      inputLock = false;
+      spawnQueued = true;
+      setTimeout(()=>{
+        spawnQueued = false;
+        if(state==="running") spawnBlock();
+      }, 140);
+    }
 
 /* =========================
    Collision rule
@@ -1215,7 +1614,7 @@ Events.on(engine,'collisionStart',(event)=>{
     const other = (pair.bodyA===fallingBlock) ? pair.bodyB : pair.bodyA;
 
     if(other === ground){
-      if(level > 0){ startGameOver("掉到地板！"); return; }
+      if(level > 0){ startGameOver("還我頭期款！"); return; }
       beginPendingCommit(fallingBlock, ground);
       return;
     }
@@ -1272,7 +1671,7 @@ function updateCollapseDetector(dt){
     else collapseBadMs = Math.max(0, collapseBadMs - dt*1000 * 0.9);
   }
 
-  if(collapseBadMs >= COLLAPSE.holdMs) startGameOver("建築倒塌！");
+  if(collapseBadMs >= COLLAPSE.holdMs) startGameOver("蓋越高，分數越高！");
 }
 
 /* =========================
@@ -1284,10 +1683,6 @@ function endRound(reason, mode){
   endReason = reason;
 
   inputLock = true;
-  spawnQueued = false;
-  fallingBlock = null;
-  pendingCommit = null;
-  if(currentCraneBlock){ World.remove(world, currentCraneBlock); currentCraneBlock=null; }
 
   const rScore = computeRoundScore();
   roundScores[roundIndex-1] = rScore;
@@ -1297,35 +1692,14 @@ function endRound(reason, mode){
     showRoundSummaryUI({ mode, reason, roundScore: rScore });
     return;
   }
-
   if(mode === "win"){
     state = "ended";
     showRoundSummaryUI({ mode, reason, roundScore: rScore });
     return;
   }
-
   if(mode === "collapse"){
-    state = "collapsing";
-    showOverlayCollapsing(reason);
-
-    const n=stackedBlocks.length;
-    for(let i=0;i<n;i++){
-      const b=stackedBlocks[i];
-      const t=(i+1)/Math.max(1,n);
-      const dir=-1;
-      const fx=dir*(0.00008+0.00018*t)*b.mass;
-      const fy=(0.00002*t)*b.mass;
-      Body.applyForce(b,b.position,{x:fx,y:fy});
-      Body.setAngularVelocity(b, b.angularVelocity + dir*(0.02+0.06*t));
-    }
-
-    setTimeout(()=>{ if(ground){ World.remove(world,ground); ground=null; } }, GAMEOVER.removeGroundMs);
-
-    setTimeout(()=>{
-      state="ended";
-      showRoundSummaryUI({ mode, reason, roundScore: rScore });
-    }, GAMEOVER.showSummaryMs);
-
+    state = "ended";
+    showRoundSummaryUI({ mode, reason, roundScore: rScore });
     return;
   }
 }
@@ -1334,7 +1708,8 @@ function showRoundSummaryUI({ mode, reason, roundScore }){
   const isLast = (roundIndex === ROUND_COUNT);
 
   if(!isLast){
-    const titleText = (mode === "win") ? "恭喜破關" : "遊戲結束";
+    // ✅ Round1/2：「遊戲結束」改成「中場結算」
+    const titleText = "中場結算";
     const subText = reason;
 
     showOverlaySummaryBase({
@@ -1355,15 +1730,10 @@ function showRoundSummaryUI({ mode, reason, roundScore }){
     return;
   }
 
-  tsEnd = Date.now();
+  // Round3 유지：遊戲結束/恭喜破關照你原本（這裡保守保留）
   const total = (roundScores[0]||0) + (roundScores[1]||0) + (roundScores[2]||0);
-
   const titleText = (mode === "win") ? "恭喜破關" : "遊戲結束";
   const subText = reason;
-
-  const myEntry = { runId, playerId, total, tsEnd };
-  const arr = addToLB(myEntry);
-  renderLB(arr, runId);
 
   showOverlaySummaryBase({
     titleText,
@@ -1373,12 +1743,33 @@ function showRoundSummaryUI({ mode, reason, roundScore }){
     isLastRound: true
   });
 
+  tsEnd = Date.now();
+  const arr = addToLB({ runId, playerId, total, tsEnd });
+  renderLB(arr, runId);
+
+  async function submitScoreToFirestore({ playerId, total, tsEnd, runId }){
+  const db = window.__db;
+  const auth = window.__auth;
+  if(!db || !auth?.currentUser) return;
+
+  await addDoc(collection(db, "leaderboard"), {
+    playerId,
+    total,
+    tsEnd,
+    runId,
+    uid: auth.currentUser.uid,
+    createdAt: serverTimestamp()
+  });
+}
+
   runSummaryCountUp({
     isLast: true,
     roundScore: 0,
     totalScore: total,
     showCumulativeAfterRound2: false
   });
+
+  submitScoreToFirestore({ playerId, total, tsEnd, runId }).catch(()=>{});
 }
 
 function startGameOver(reason){
@@ -1394,6 +1785,18 @@ Events.on(engine,'beforeUpdate',()=>{
   if(lastTimestamp==null) lastTimestamp=ts;
   const dt=(ts-lastTimestamp)/1000;
   lastTimestamp=ts;
+
+  if(shakeMs > 0){
+  shakeMs -= dt * 1000;
+  if(shakeMs <= 0){
+    shakeMs = 0;
+    shakeAmp = 0;
+  }else{
+    // 線性或指數衰減都可以，這裡用線性衰減
+    const k = shakeMs / 180; // 180ms 是預設值
+    shakeAmp = Math.max(0.5, shakeAmp * (0.85 + 0.15*k));
+  }
+}
 
   updateCamera();
   updateVfx(dt);
@@ -1606,12 +2009,28 @@ function drawSkyDecor(ctx){
   const par1 = cam * 0.25;
   const par2 = cam * 0.12;
 
-  const hasCloud = level < 15;
-  const hasSun = level < 10;
-  const hasMoon = (level >= 10 && level < 20);
-  const hasStars = level >= 15;
-  const hasPlanet = level >= 22;
+  // ✅ 依回合主題覆蓋（Round2/3）
+  let hasCloud = level < 15;
+  let hasSun = level < 10;
+  let hasMoon = (level >= 10 && level < 20);
+  let hasStars = level >= 15;
+  let hasPlanet = level >= 22;
 
+  if(bgTheme === "dusk"){
+    hasCloud = true;
+    hasSun = true;     // 黃昏可以畫「低一點的太陽」
+    hasMoon = false;
+    hasStars = false;  // 也可以改 true + 少量星星，看你風格
+    hasPlanet = false;
+  }else if(bgTheme === "night"){
+    hasCloud = false;  // 夜晚通常雲少（或你想留也行）
+    hasSun = false;
+    hasMoon = true;
+    hasStars = true;
+    hasPlanet = true;  // 行星/光暈更有感
+  }
+
+  // ↓↓↓ 下面原本的繪製程式碼照舊，只是用上面的 hasCloud/hasSun... 來決定
   if(hasCloud){
     const n = 5;
     for(let i=0;i<n;i++){
@@ -1623,11 +2042,18 @@ function drawSkyDecor(ctx){
       drawCloud(ctx, rx, y, s, 0.55);
     }
   }
-  if(hasSun)  drawSun(ctx, viewW*0.82, 110 + (par2 % 200)*0.12, 34);
-  if(hasMoon) drawMoon(ctx, viewW*0.80, 120 + (par2 % 260)*0.10, 28);
+
+  // ✅ 黃昏太陽位置可以壓低一點
+  if(hasSun){
+    const y = (bgTheme === "dusk") ? (viewH*0.28 + (par2 % 200)*0.12) : (110 + (par2 % 200)*0.12);
+    drawSun(ctx, viewW*0.78, y, 34);
+  }
+  if(hasMoon){
+    drawMoon(ctx, viewW*0.80, 120 + (par2 % 260)*0.10, 28);
+  }
 
   if(hasStars){
-    const starCount = 24;
+    const starCount = (bgTheme === "night") ? 46 : 24; // 夜晚星星更多
     for(let i=0;i<starCount;i++){
       const seed = 5000 + i*31;
       const x = seededRand(seed) * viewW;
@@ -1638,7 +2064,10 @@ function drawSkyDecor(ctx){
       drawStar(ctx, x, y, r, a);
     }
   }
-  if(hasPlanet) drawPlanet(ctx, viewW*0.18, 140 + (par1 % 220)*0.10, 34);
+
+  if(hasPlanet){
+    drawPlanet(ctx, viewW*0.18, 140 + (par1 % 220)*0.10, 34);
+  }
 }
 
 /* =========================
@@ -1783,16 +2212,6 @@ Events.on(render,'afterRender',()=>{
   }
   ctx.restore();
   ctx.globalAlpha=1;
-
-  ctx.save();
-  ctx.setTransform(1,0,0,1,0,0);
-  ctx.strokeStyle = "rgba(255,0,0,0.9)";
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(0, viewH - 2);
-  ctx.lineTo(viewW, viewH - 2);
-  ctx.stroke();
-  ctx.restore();
 });
 
 /* =========================
@@ -1819,6 +2238,9 @@ function sortLB(arr){
   });
   return arr;
 }
+
+playerId = playerId || "-";
+
 function addToLB(entry){
   const arr = loadLB();
   arr.push(entry);
@@ -1862,6 +2284,58 @@ function renderLB(arr, highlightRunId){
 /* =========================
    Retry / Input / Resize
 ========================= */
+
+/* =========================
+   Login System
+========================= */
+function showLogin(){
+  login.classList.add('show');
+  login.removeAttribute('inert');
+  login.setAttribute('aria-hidden','false');
+  idInput?.focus();
+}
+
+function hideLogin(){
+  document.activeElement?.blur();
+  login.classList.remove('show');
+  login.setAttribute('aria-hidden','true');
+  login.setAttribute('inert','');
+}
+
+function hideOverlay(){
+  document.activeElement?.blur();
+  overlay.classList.remove('show');
+  overlay.setAttribute('aria-hidden','true');
+  overlay.setAttribute('inert','');
+}
+
+function onLogin(){
+  console.log("onLogin fired");
+  const v = validatePlayerId(idInput?.value);
+  if(!v.ok){
+    if(loginErr) loginErr.textContent = v.msg;
+    return;
+  }
+
+  if(loginErr) loginErr.textContent = ""; // ✅ 清掉錯誤訊息
+
+  playerId = v.id;
+  localStorage.setItem("player_id", playerId);
+
+  hideLogin();
+
+  runId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  tsStart = Date.now();
+
+  startRound(1);
+  spawnBlock();
+}
+
+btnLogin?.addEventListener('click', onLogin);
+idInput?.addEventListener('keydown', (e)=>{
+  if(e.key === "Enter") onLogin();
+});
+
 function onPrimaryButton(e){
   e.preventDefault();
   e.stopPropagation();
@@ -1870,7 +2344,10 @@ function onPrimaryButton(e){
   if(btnRetry.disabled) return;
 
   if(roundIndex < ROUND_COUNT){
-    startRound(roundIndex + 1);
+    const next = roundIndex + 1;
+    resetWorldForNewRound();  // ✅ 清塔、清掉舊的物理物件、重建地板、重設相機等
+    startRound(next);         // ✅ 重設 score/level/combo/timeLeft + 關閉 overlay
+    spawnBlock();             // ✅ 生成下一回合的第一塊（不然你會卡住）
   }else{
     location.reload();
   }
@@ -1879,8 +2356,28 @@ function onPrimaryButton(e){
 btnRetry.addEventListener('click', onPrimaryButton);
 btnRetry.addEventListener('touchstart', (e)=>{ e.preventDefault(); onPrimaryButton(e); }, { passive:false });
 
-window.addEventListener('mousedown', drop);
-window.addEventListener('touchstart', (e)=>{ e.preventDefault(); drop(); }, { passive:false });
+function shouldIgnoreGlobalInput(e){
+  // 登入/結算 overlay 開著，就不要把觸控當成 drop
+  if(login?.classList.contains('show')) return true;
+  if(overlay?.classList.contains('show')) return true;
+
+  // 另外保險：點到按鈕/輸入框也不要攔
+  const t = e?.target;
+  if(t && (t.closest?.('button') || t.closest?.('input') || t.closest?.('#login') || t.closest?.('#overlay'))) return true;
+
+  return false;
+}
+
+window.addEventListener('mousedown', (e)=>{
+  if(shouldIgnoreGlobalInput(e)) return;
+  drop();
+});
+
+window.addEventListener('touchstart', (e)=>{
+  if(shouldIgnoreGlobalInput(e)) return;
+  e.preventDefault(); // 只在遊戲區才 preventDefault
+  drop();
+}, { passive:false });
 
 function rebuildGround(){
   if(ground) World.remove(world, ground);
@@ -1895,12 +2392,21 @@ function rebuildGround(){
   World.add(world, ground);
 }
 
-window.addEventListener('resize', ()=>{
+function resizeRender(){
   viewW = window.innerWidth;
   viewH = window.innerHeight;
   WORLD_HEIGHT = viewH * 60;
 
-  Render.setSize(render, viewW, viewH);
+  // ✅ 正確改尺寸方式（0.19.0 可用）
+  render.canvas.width  = viewW * (window.devicePixelRatio || 1);
+  render.canvas.height = viewH * (window.devicePixelRatio || 1);
+  render.canvas.style.width  = viewW + "px";
+  render.canvas.style.height = viewH + "px";
+
+  render.options.width = viewW;
+  render.options.height = viewH;
+
+  // pixel ratio
   Render.setPixelRatio(render, window.devicePixelRatio || 1);
 
   rebuildGround();
@@ -1912,7 +2418,9 @@ window.addEventListener('resize', ()=>{
   applyCamera();
 
   if(overlay.classList.contains('show')) resizeFxCanvas();
-});
+}
+
+window.addEventListener('resize', resizeRender);
 
 /* =========================
    Round 切換：清塔重玩
@@ -1952,26 +2460,33 @@ function startRound(idx){
   roundTime = getRoundTime(roundIndex);
 
   state = "running";
-  endReason = "";
+  inputLock = false;
+  spawnQueued = false;
   score = 0;
   level = 0;
   combo = 0;
   totalPerfect = 0;
   timeLeft = roundTime;
 
-  inputLock = false;
-  spawnQueued = false;
-
-  setRoundBadge();
-  measureUiBottom();
+  setRoundHUD();
   updateTimerUI();
   updateUI();
 
-  overlay.classList.remove('show');
-  overlay.setAttribute('aria-hidden','true');
+  hideOverlay();
+  didFirstLandFX = false;
 
-  resetWorldForNewRound();
-  spawnBlock();
+  // ✅ 套用回合背景（Round2 dusk、Round3 night）
+  applyRoundBackground();
+}
+
+function reinforceBase(body){
+  body.friction = Math.max(body.friction || 0, BASE_ANCHOR.friction);
+  body.frictionStatic = Math.max(body.frictionStatic || 0, BASE_ANCHOR.frictionStatic);
+  body.frictionAir = Math.max(body.frictionAir || 0, BASE_ANCHOR.frictionAir);
+
+  // 立刻抑制「底座被撞後的滑動/旋轉」累積
+  Body.setVelocity(body, { x: body.velocity.x * BASE_ANCHOR.velXDamp, y: body.velocity.y });
+  Body.setAngularVelocity(body, body.angularVelocity * BASE_ANCHOR.angDamp);
 }
 
 /* =========================
@@ -2008,17 +2523,17 @@ Runner.run(Runner.create(), engine);
 runId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
 tsStart = Date.now();
 
-setRoundBadge();
 measureUiBottom();
-
-timeLeft = roundTime;
-updateTimerUI();
-updateUI();
 setBackgroundForLevelSmooth(0);
+initCamera(); // 相機可以先 init
 
-initCamera();
-spawnBlock();
-startRound(1);
+// ✅ 顯示登入（可帶入上次ID）
+try{
+  const saved = localStorage.getItem("player_id");
+  if(saved && idInput) idInput.value = saved;
+}catch(e){}
+showLogin();
+
 </script>
 </body>
 </html>
