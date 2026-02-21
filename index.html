@@ -414,7 +414,7 @@
   <div id="login" class="show" aria-hidden="false">
     <div class="backdrop"></div>
     <div class="panel" role="dialog" aria-modal="true">
-      <h1 style="margin:2px 0 8px 0;font-size:40px;font-weight:900;color:#fff;">建築大師v2113</h1>
+      <h1 style="margin:2px 0 8px 0;font-size:40px;font-weight:900;color:#fff;">建築大師v2123</h1>
       <p style="margin:0 0 10px 0;color:rgba(255,255,255,0.9);">輸入玩家ID（中文字限7個）</p>
       <input id="player-id-input" maxlength="14"
         style="width:100%;box-sizing:border-box;border-radius:14px;padding:12px 14px;border:1px solid rgba(255,255,255,0.25);background:rgba(0,0,0,0.25);color:#fff;font-size:18px;font-weight:900;outline:none;"
@@ -1319,6 +1319,7 @@ function showOverlaySummaryBase({ titleText, subText, buttonText, showLB, isLast
 }
 
 function spawnBlock(){
+  console.log("[spawnBlock called]", { state, inputLock, spawnQueued, hasCrane: !!currentCraneBlock });
   if(state!=="running") return;
   if(spawnQueued) return;
   if(inputLock) return;
@@ -2293,11 +2294,22 @@ function onPrimaryButton(e){
 
   if(roundIndex < ROUND_COUNT){
     const next = roundIndex + 1;
+
     resetWorldForNewRound();
     startRound(next);
     spawnBlock();
+
   }else{
-    location.reload();
+    // 三回合結束 → 回到命名畫面（不 reload）
+
+    roundScores = [0,0,0];
+    runId = "";
+    tsStart = 0;
+    tsEnd = 0;
+
+    resetWorldForNewRound();   // 清場 + 重建地板 + 相機
+    hideOverlay();
+    showLogin();
   }
 }
 
@@ -2380,6 +2392,9 @@ function resizeRender(){
     const out = (y < camTop - 400) || (y > camBottom + 400);
 
     if(out){
+      console.warn("[resizeRender] crane out-of-view -> respawn", {
+      camTop, camBottom, y: currentCraneBlock.position.y
+    });
       try{ World.remove(world, currentCraneBlock); }catch(e){}
       currentCraneBlock = null;
       inputLock = false;
