@@ -1480,6 +1480,7 @@ function beginPendingCommit(body, landedOn){
     startY: body.position.y,
     diff,
     w
+    committed: false,
   };
 
   fallingBlock = null;
@@ -1515,6 +1516,8 @@ function updatePendingCommit(nowTs){
 
 function commitSuccess(){
   if(!pendingCommit || state!=="running") return;
+  if(pendingCommit.committed) return;
+  pendingCommit.committed = true;
 
   const { body, diff, w, base } = pendingCommit;
 
