@@ -414,7 +414,7 @@
   <div id="login" class="show" aria-hidden="false">
     <div class="backdrop"></div>
     <div class="panel" role="dialog" aria-modal="true">
-      <h1 style="margin:2px 0 8px 0;font-size:40px;font-weight:900;color:#fff;">建築大師v21.53</h1>
+      <h1 style="margin:2px 0 8px 0;font-size:40px;font-weight:900;color:#fff;">建築大師v2113</h1>
       <p style="margin:0 0 10px 0;color:rgba(255,255,255,0.9);">輸入玩家ID（中文字限7個）</p>
       <input id="player-id-input" maxlength="14"
         style="width:100%;box-sizing:border-box;border-radius:14px;padding:12px 14px;border:1px solid rgba(255,255,255,0.25);background:rgba(0,0,0,0.25);color:#fff;font-size:18px;font-weight:900;outline:none;"
@@ -524,13 +524,21 @@ async function fetchTopScores(){
     const q = query(
       collection(db, "leaderboard"),
       orderBy("total", "desc"),
-      orderBy("tsEnd", "asc"),
-      limit(20)
+      limit(80) // 多抓一些回來做同分排序
     );
     const snap = await getDocs(q);
-    return snap.docs.map(d => d.data());
+
+    const arr = snap.docs.map(d => d.data());
+
+    // 前端同分再比 tsEnd（越早越前）
+    arr.sort((a,b)=>{
+      if((b.total||0) !== (a.total||0)) return (b.total||0) - (a.total||0);
+      return (a.tsEnd||0) - (b.tsEnd||0);
+    });
+
+    return arr.slice(0, 20);
   }catch(e){
-    console.warn("[leaderboard] Firestore query failed (index/auth/rules?):", e);
+    console.warn("[leaderboard] Firestore query failed:", e);
     throw e;
   }
 }
@@ -2202,7 +2210,9 @@ function renderLB(topArr, highlightRunId){
     const row = document.createElement('div');
     const isMe = highlightRunId && it.runId === highlightRunId;
     row.className = "lb-row" + (isMe ? " lb-me" : "");
-    const pid = (it.playerId != null && it.playerId !== "") ? it.playerId : "-";
+    const pidRaw =
+      it?.playerId ?? it?.player_id ?? it?.name ?? it?.nickname ?? it?.pid ?? "-";
+    const pid = String(pidRaw).trim() || "-";
     row.innerHTML = `<div>${idx+1}</div><div>${pid}</div><div>${it.total||0}</div>`;
     list.appendChild(row);
   });
@@ -2258,10 +2268,11 @@ function onLogin(){
   runId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
   tsStart = Date.now();
 
-  // ✅ 等鍵盤收起、viewport 高度穩定
   requestAnimationFrame(()=>{
     requestAnimationFrame(()=>{
-      resizeRender();   // 重新計算 viewH / WORLD_HEIGHT / ground / camera
+      resizeRender();  
+      resetWorldForNewRound();   
+      initCamera();      
       startRound(1);
       spawnBlock();
     });
@@ -2349,6 +2360,16 @@ function resizeRender(){
   cameraTargetY = Math.min(cameraTargetY, t);
   currentScrollY = Math.min(currentScrollY, cameraTargetY);
   applyCamera();
+
+  const nothingInScene =
+  stackedBlocks.length === 0 &&
+  !currentCraneBlock &&
+  !fallingBlock &&
+  !pendingCommit;
+
+  if (nothingInScene) {
+    initCamera();
+  }
 
 
   if(state === "running" && currentCraneBlock && !fallingBlock && !pendingCommit){
