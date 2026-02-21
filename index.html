@@ -1315,6 +1315,7 @@ function spawnBlock(){
   if(spawnQueued) return;
   if(inputLock) return;
 
+
   measureUiBottom();
 
   const nextLvl = level + 1;
@@ -1363,6 +1364,8 @@ function spawnBlock(){
 
   World.add(world,currentCraneBlock);
   cameraTargetY = Math.min(cameraTargetY, computeCameraTargetFromSafeTop());
+
+  console.log("[spawn]", { viewH, WORLD_HEIGHT, groundY, camY: render.bounds.min.y, y: currentCraneBlock.position.y });
 }
 
 function drop(){
@@ -2267,7 +2270,6 @@ function onLogin(){
     if(loginErr) loginErr.textContent = v.msg;
     return;
   }
-
   if(loginErr) loginErr.textContent = "";
 
   playerId = v.id;
@@ -2278,8 +2280,14 @@ function onLogin(){
   runId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
   tsStart = Date.now();
 
-  startRound(1);
-  spawnBlock();
+  // ✅ 等鍵盤收起、viewport 高度穩定
+  requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>{
+      resizeRender();   // 重新計算 viewH / WORLD_HEIGHT / ground / camera
+      startRound(1);
+      spawnBlock();
+    });
+  });
 }
 
 btnLogin?.addEventListener('click', onLogin);
@@ -2364,10 +2372,32 @@ function resizeRender(){
   currentScrollY = Math.min(currentScrollY, cameraTargetY);
   applyCamera();
 
+
+  if(state === "running" && currentCraneBlock && !fallingBlock && !pendingCommit){
+    const camTop = render.bounds.min.y;
+    const camBottom = render.bounds.max.y;
+
+    const y = currentCraneBlock.position.y;
+    const out = (y < camTop - 400) || (y > camBottom + 400);
+
+    if(out){
+      try{ World.remove(world, currentCraneBlock); }catch(e){}
+      currentCraneBlock = null;
+      inputLock = false;
+      spawnQueued = false;
+      spawnBlock();
+    }
+  }
+
   if(overlay.classList.contains('show')) resizeFxCanvas();
 }
 
 window.addEventListener('resize', resizeRender);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    resizeRender();
+  });
+}
 
 function removeBodySafe(b){
   if(!b) return;
