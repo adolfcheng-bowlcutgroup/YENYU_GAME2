@@ -414,7 +414,7 @@
   <div id="login" class="show" aria-hidden="false">
     <div class="backdrop"></div>
     <div class="panel" role="dialog" aria-modal="true">
-      <h1 style="margin:2px 0 8px 0;font-size:40px;font-weight:900;color:#fff;">建築大師v2123</h1>
+      <h1 style="margin:2px 0 8px 0;font-size:40px;font-weight:900;color:#fff;">建築大師v2132</h1>
       <p style="margin:0 0 10px 0;color:rgba(255,255,255,0.9);">輸入玩家ID（中文字限7個）</p>
       <input id="player-id-input" maxlength="14"
         style="width:100%;box-sizing:border-box;border-radius:14px;padding:12px 14px;border:1px solid rgba(255,255,255,0.25);background:rgba(0,0,0,0.25);color:#fff;font-size:18px;font-weight:900;outline:none;"
@@ -1319,11 +1319,12 @@ function showOverlaySummaryBase({ titleText, subText, buttonText, showLB, isLast
 }
 
 function spawnBlock(){
-  console.log("[spawnBlock called]", { state, inputLock, spawnQueued, hasCrane: !!currentCraneBlock });
+  console.log("[spawnBlock called]", { state, inputLock, spawnQueued, hasCrane: !!currentCraneBlock, stack: new Error().stack });
+  if(login?.classList.contains('show')) return;
+  if(overlay?.classList.contains('show')) return;
   if(state!=="running") return;
   if(spawnQueued) return;
   if(inputLock) return;
-
 
   measureUiBottom();
 
@@ -2232,6 +2233,8 @@ function mergeEnsureMine(topArr, mine){
 
 
 function showLogin(){
+  state = "login";    
+  inputLock = true;
   login.classList.add('show');
   login.removeAttribute('inert');
   login.setAttribute('aria-hidden','false');
@@ -2300,14 +2303,17 @@ function onPrimaryButton(e){
     spawnBlock();
 
   }else{
-    // 三回合結束 → 回到命名畫面（不 reload）
+    
+
+    state = "login"; 
+    inputLock = true;  
 
     roundScores = [0,0,0];
     runId = "";
     tsStart = 0;
     tsEnd = 0;
 
-    resetWorldForNewRound();   // 清場 + 重建地板 + 相機
+    resetWorldForNewRound();
     hideOverlay();
     showLogin();
   }
