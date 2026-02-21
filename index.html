@@ -414,7 +414,7 @@
   <div id="login" class="show" aria-hidden="false">
     <div class="backdrop"></div>
     <div class="panel" role="dialog" aria-modal="true">
-      <h1 style="margin:2px 0 8px 0;font-size:40px;font-weight:900;color:#fff;">建築大師v2132</h1>
+      <h1 style="margin:2px 0 8px 0;font-size:40px;font-weight:900;color:#fff;">建築大師v2137</h1>
       <p style="margin:0 0 10px 0;color:rgba(255,255,255,0.9);">輸入玩家ID（中文字限7個）</p>
       <input id="player-id-input" maxlength="14"
         style="width:100%;box-sizing:border-box;border-radius:14px;padding:12px 14px;border:1px solid rgba(255,255,255,0.25);background:rgba(0,0,0,0.25);color:#fff;font-size:18px;font-weight:900;outline:none;"
@@ -1106,6 +1106,8 @@ const CRANE = {
 };
 
 let currentCraneBlock = null;
+let lastSpawnAt = 0;
+const RESIZE_RESPAWN_GRACE_MS = 350; // 剛生成後 350ms 內，不要因 resize 判 out-of-view 就重生
 let fallingBlock = null;
 let pendingCommit = null;
 
@@ -1375,6 +1377,7 @@ function spawnBlock(){
   World.add(world,currentCraneBlock);
   cameraTargetY = Math.min(cameraTargetY, computeCameraTargetFromSafeTop());
 
+  lastSpawnAt = performance.now();
   console.log("[spawn]", { viewH, WORLD_HEIGHT, groundY, camY: render.bounds.min.y, y: currentCraneBlock.position.y });
 }
 
@@ -2390,24 +2393,35 @@ function resizeRender(){
   }
 
 
-  if(state === "running" && currentCraneBlock && !fallingBlock && !pendingCommit){
-    const camTop = render.bounds.min.y;
-    const camBottom = render.bounds.max.y;
+if(state === "running" && currentCraneBlock && !fallingBlock && !pendingCommit){
 
-    const y = currentCraneBlock.position.y;
-    const out = (y < camTop - 400) || (y > camBottom + 400);
+  applyCamera();
 
-    if(out){
-      console.warn("[resizeRender] crane out-of-view -> respawn", {
-      camTop, camBottom, y: currentCraneBlock.position.y
-    });
-      try{ World.remove(world, currentCraneBlock); }catch(e){}
-      currentCraneBlock = null;
-      inputLock = false;
-      spawnQueued = false;
-      spawnBlock();
-    }
+  const now = performance.now();
+  if(now - lastSpawnAt < RESIZE_RESPAWN_GRACE_MS){
+    return;
   }
+
+  const camTop = render.bounds.min.y;
+  const camBottom = render.bounds.max.y;
+
+  const y = currentCraneBlock.position.y;
+  const out = (y < camTop - 600) || (y > camBottom + 600); // padding 放寬一點更穩
+
+  if(out){
+    console.log("[resizeRender] crane out-of-view -> respawn", { camTop, camBottom, y, viewH });
+
+    try{ World.remove(world, currentCraneBlock); }catch(e){}
+    currentCraneBlock = null;
+
+    inputLock = false;
+    spawnQueued = false;
+
+    setTimeout(()=>{
+      if(state==="running" && !currentCraneBlock) spawnBlock();
+    }, 0);
+  }
+}
 
   if(overlay.classList.contains('show')) resizeFxCanvas();
 }
