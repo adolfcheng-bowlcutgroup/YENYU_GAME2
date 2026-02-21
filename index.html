@@ -53,13 +53,13 @@
       gap:10px;
     }
 
-    #hud-top{ 
-      display:flex; 
-      gap:10px; 
-      width:100%; 
-      box-sizing:border-box; 
+    #hud-top{
+      display:flex;
+      gap:10px;
+      width:100%;
+      box-sizing:border-box;
     }
-    
+
     .stat-card{
       flex: 1;
       background: rgba(0,0,0,0.28);
@@ -250,8 +250,8 @@
       animation: cardFlash 0.58s ease-out 1;
     }
 
-    #game-viewport, canvas { touch-action: none; } /* 避免遊戲區域滑動干擾 */
-    .lb-scroll { touch-action: pan-y; }            /* 明確允許垂直滑動 */
+    #game-viewport, canvas { touch-action: none; }
+    .lb-scroll { touch-action: pan-y; }
 
     .actions{
       margin-top: 12px;
@@ -293,7 +293,7 @@
     .lb-sub{ font-size: 12px; opacity: 0.75; margin-bottom: 8px; }
 
     .lb-scroll{
-      max-height: 46vh;         
+      max-height: 46vh;
       overflow-y: auto;
       overflow-x: hidden;
       -webkit-overflow-scrolling: touch;
@@ -415,7 +415,7 @@
   <div id="login" class="show" aria-hidden="false">
     <div class="backdrop"></div>
     <div class="panel" role="dialog" aria-modal="true">
-      <h1 style="margin:2px 0 8px 0;font-size:40px;font-weight:900;color:#fff;">建築大師v2206</h1>
+      <h1 style="margin:2px 0 8px 0;font-size:40px;font-weight:900;color:#fff;">建築大師v2253</h1>
       <p style="margin:0 0 10px 0;color:rgba(255,255,255,0.9);">輸入玩家ID（中文字限7個）</p>
       <input id="player-id-input" maxlength="14"
         style="width:100%;box-sizing:border-box;border-radius:14px;padding:12px 14px;border:1px solid rgba(255,255,255,0.25);background:rgba(0,0,0,0.25);color:#fff;font-size:18px;font-weight:900;outline:none;"
@@ -525,13 +525,12 @@ async function fetchTopScores(){
     const q = query(
       collection(db, "leaderboard"),
       orderBy("total", "desc"),
-      limit(80) // 多抓一些回來做同分排序
+      limit(80)
     );
     const snap = await getDocs(q);
 
     const arr = snap.docs.map(d => d.data());
 
-    // 前端同分再比 tsEnd（越早越前）
     arr.sort((a,b)=>{
       if((b.total||0) !== (a.total||0)) return (b.total||0) - (a.total||0);
       return (a.tsEnd||0) - (b.tsEnd||0);
@@ -625,28 +624,26 @@ function displayUnits(str){
     const cp = ch.codePointAt(0);
 
     const isCJK =
-      (cp >= 0x4E00 && cp <= 0x9FFF) ||  // 中日韓統一表意文字
-      (cp >= 0x3400 && cp <= 0x4DBF) ||  // 擴展A
-      (cp >= 0xF900 && cp <= 0xFAFF);    // 相容表意文字
+      (cp >= 0x4E00 && cp <= 0x9FFF) ||
+      (cp >= 0x3400 && cp <= 0x4DBF) ||
+      (cp >= 0xF900 && cp <= 0xFAFF);
 
-    const isASCII = cp <= 0x7F;          // 英數半形
+    const isASCII = cp <= 0x7F;
 
     units += isASCII ? 1 : (isCJK ? 2 : 2);
   }
   return units;
 }
 
-const MAX_CJK_CHARS = 7;        // 中文最多 7 個字
-const MAX_UNITS = MAX_CJK_CHARS * 2; // 14 units
+const MAX_CJK_CHARS = 7;
+const MAX_UNITS = MAX_CJK_CHARS * 2;
 
 function validatePlayerId(raw){
   const s = (raw || "").trim();
 
   if(!s) return { ok:false, msg:"請輸入ID" };
 
-
   if(/\s/.test(s)) return { ok:false, msg:"ID不可包含空白" };
-
 
   const u = displayUnits(s);
   if(u > MAX_UNITS){
@@ -1109,7 +1106,7 @@ const CRANE = {
 
 let currentCraneBlock = null;
 let lastSpawnAt = 0;
-const RESIZE_RESPAWN_GRACE_MS = 1500; // 剛生成後 350ms 內，不要因 resize 判 out-of-view 就重生
+const RESIZE_RESPAWN_GRACE_MS = 1500;
 let fallingBlock = null;
 let pendingCommit = null;
 
@@ -1132,6 +1129,11 @@ let lastTimestamp = null;
 
 const particles = [];
 const popups = [];
+
+let spawnLockUntil = 0;
+
+/* ✅ 新增：sessionToken（只新增這行，不改其他結構） */
+let sessionToken = 0;
 
 function getTowerTopWorldY(){
   let topY = Infinity;
@@ -1272,7 +1274,7 @@ function updateTimerUI(){
 
 function showOverlayCollapsing(reasonText){
   overlay.classList.add('show');
-  overlay.removeAttribute('inert'); 
+  overlay.removeAttribute('inert');
   overlay.setAttribute('aria-hidden','false');
   ovTitle.textContent = "建築物倒塌";
   ovSub.textContent = reasonText + "（崩塌中…）";
@@ -1319,10 +1321,7 @@ function showOverlaySummaryBase({ titleText, subText, buttonText, showLB, isLast
   }
 
   if(ovBreakdown) ovBreakdown.style.display = "block";
-
 }
-
-let spawnLockUntil = 0;
 
 function spawnBlock(){
   const now = performance.now();
@@ -1426,13 +1425,13 @@ function stabilizeOnLanding(body){
 
 function beginPendingCommit(body, landedOn){
   const isFirstLanding = (level === 0);
-  
+
   if(isFirstLanding && !didFirstLandFX){
     didFirstLandFX = true;
     reinforceBase(body);
     spawnParticles(body.position.x, body.position.y, 34);
     startShake(180, 7);
-  } 
+  }
 
   const base = landedOn || (stackedBlocks.length>0 ? stackedBlocks[stackedBlocks.length-1] : ground);
 
@@ -1566,9 +1565,23 @@ function commitSuccess(){
 
   inputLock = false;
   spawnQueued = true;
+
+  const myToken = sessionToken;
   setTimeout(()=>{
+    if(myToken !== sessionToken) return;
+
     spawnQueued = false;
-    if(state==="running") spawnBlock();
+
+    if(
+      state === "running" &&
+      !currentCraneBlock &&
+      !fallingBlock &&
+      !pendingCommit &&
+      !login?.classList.contains("show") &&
+      !overlay?.classList.contains("show")
+    ){
+      spawnBlock();
+    }
   }, 140);
 }
 
@@ -1707,31 +1720,29 @@ async function showRoundSummaryUI({ mode, reason, roundScore }){
   tsEnd = Date.now();
   const localBest = updateLocalBest(total);
 
-const mine = { playerId, total, tsEnd, runId };
+  const mine = { playerId, total, tsEnd, runId };
 
-await runSummaryCountUp({
-  isLast: true,
-  roundScore: 0,
-  totalScore: total,
-  showCumulativeAfterRound2: false
-});
+  await runSummaryCountUp({
+    isLast: true,
+    roundScore: 0,
+    totalScore: total,
+    showCumulativeAfterRound2: false
+  });
 
-let top20 = [];
-try{
-  await submitScoreToFirestore(mine);
-  top20 = await fetchTopScores();
-}catch(e){
-  console.warn("[leaderboard] submit or fetch failed:", e);
-  top20 = loadLB();
-}
+  let top20 = [];
+  try{
+    await submitScoreToFirestore(mine);
+    top20 = await fetchTopScores();
+  }catch(e){
+    console.warn("[leaderboard] submit or fetch failed:", e);
+    top20 = loadLB();
+  }
 
+  addToLB(mine);
 
-addToLB(mine);
+  if(!top20?.length) top20 = loadLB();
 
-
-if(!top20?.length) top20 = loadLB();
-
-renderLB(mergeEnsureMine(top20, mine), runId);
+  renderLB(mergeEnsureMine(top20, mine), runId);
   const lbSub = document.getElementById('lb-sub');
   if(lbSub){
     lbSub.textContent = top20?.length
@@ -1739,7 +1750,6 @@ renderLB(mergeEnsureMine(top20, mine), runId);
       : `本機歷史最高分：${localBest}`;
   }
 }
-
 
 function startGameOver(reason){
   if(state!=="running") return;
@@ -1753,15 +1763,15 @@ Events.on(engine,'beforeUpdate',()=>{
   lastTimestamp=ts;
 
   if(shakeMs > 0){
-  shakeMs -= dt * 1000;
-  if(shakeMs <= 0){
-    shakeMs = 0;
-    shakeAmp = 0;
-  }else{
-    const k = shakeMs / 180;
-    shakeAmp = Math.max(0.5, shakeAmp * (0.85 + 0.15*k));
+    shakeMs -= dt * 1000;
+    if(shakeMs <= 0){
+      shakeMs = 0;
+      shakeAmp = 0;
+    }else{
+      const k = shakeMs / 180;
+      shakeAmp = Math.max(0.5, shakeAmp * (0.85 + 0.15*k));
+    }
   }
-}
 
   updateCamera();
   updateVfx(dt);
@@ -2249,9 +2259,8 @@ function mergeEnsureMine(topArr, mine){
   return arr.slice(0, 20);
 }
 
-
 function showLogin(){
-  state = "login";    
+  state = "login";
   inputLock = true;
   login.classList.add('show');
   login.removeAttribute('inert');
@@ -2282,8 +2291,8 @@ function onLogin(){
   const v = validatePlayerId(idInput?.value);
   if(!v.ok){
     if(loginErr) loginErr.textContent = v.msg;
-    loginInProgress = false; 
-    btnLogin.disabled = false;          
+    loginInProgress = false;
+    btnLogin.disabled = false;
     return;
   }
   if(loginErr) loginErr.textContent = "";
@@ -2304,7 +2313,6 @@ function onLogin(){
     initCamera();
     startRound(1);
     spawnBlock();
-
 
     loginInProgress = false;
     btnLogin.disabled = false;
@@ -2331,10 +2339,8 @@ function onPrimaryButton(e){
     spawnBlock();
 
   }else{
-    
-
-    state = "login"; 
-    inputLock = true;  
+    state = "login";
+    inputLock = true;
 
     roundScores = [0,0,0];
     runId = "";
@@ -2348,7 +2354,6 @@ function onPrimaryButton(e){
 }
 
 btnRetry.addEventListener('click', onPrimaryButton);
-
 
 function shouldIgnoreGlobalInput(e){
   if(login?.classList.contains('show')) return true;
@@ -2417,32 +2422,45 @@ function resizeRender(){
     initCamera();
   }
 
+    if(
+      state === "running" &&
+      currentCraneBlock &&
+      !fallingBlock &&
+      !pendingCommit &&
+      !login?.classList.contains("show") &&
+      !overlay?.classList.contains("show") &&
+      !spawnQueued &&
+      (performance.now() - lastSpawnAt) >= (RESIZE_RESPAWN_GRACE_MS + 1500)  // 加長保護，避免連續 resize 期間誤殺
+    ){
+    if(level !== 0){
+      applyCamera();
 
-if(state === "running" && currentCraneBlock && !fallingBlock && !pendingCommit){
-  if(level !== 0){
-    applyCamera();
+      const now = performance.now();
+      if(now - lastSpawnAt >= RESIZE_RESPAWN_GRACE_MS){
+        const camTop = render.bounds.min.y;
+        const camBottom = render.bounds.max.y;
 
-    const now = performance.now();
-    if(now - lastSpawnAt >= RESIZE_RESPAWN_GRACE_MS){
-      const camTop = render.bounds.min.y;
-      const camBottom = render.bounds.max.y;
+        const y = currentCraneBlock.position.y;
+        const out = (y < camTop - 600) || (y > camBottom + 600);
 
-      const y = currentCraneBlock.position.y;
-      const out = (y < camTop - 600) || (y > camBottom + 600);
+        if(out){
+          console.log("[resizeRender] crane out-of-view -> respawn", { camTop, camBottom, y, viewH });
+          try{ World.remove(world, currentCraneBlock); }catch(e){}
+          currentCraneBlock = null;
 
-      if(out){
-        console.log("[resizeRender] crane out-of-view -> respawn", { camTop, camBottom, y, viewH });
-        try{ World.remove(world, currentCraneBlock); }catch(e){}
-        currentCraneBlock = null;
+          inputLock = false;
+          spawnQueued = false;
 
-        inputLock = false;
-        spawnQueued = false;
-
-        setTimeout(()=>{ if(state==="running" && !currentCraneBlock) spawnBlock(); }, 0);
+          /* ✅ 新增：token guard（只改這段 setTimeout 內外） */
+          const myToken = sessionToken;
+          setTimeout(()=>{
+            if(myToken !== sessionToken) return;
+            if(state==="running" && !currentCraneBlock) spawnBlock();
+          }, 0);
+        }
       }
     }
   }
-}
 
   if(overlay.classList.contains('show')) resizeFxCanvas();
 }
@@ -2459,6 +2477,7 @@ function removeBodySafe(b){
   try{ World.remove(world, b); }catch(e){}
 }
 function resetWorldForNewRound(){
+  sessionToken++;
   if(currentCraneBlock){ removeBodySafe(currentCraneBlock); currentCraneBlock=null; }
   if(fallingBlock){ removeBodySafe(fallingBlock); fallingBlock=null; }
   if(pendingCommit?.body){ removeBodySafe(pendingCommit.body); }
