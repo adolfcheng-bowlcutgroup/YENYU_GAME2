@@ -407,10 +407,10 @@
     <div class="backdrop"></div>
     <div class="panel" role="dialog" aria-modal="true">
       <h1 style="margin:2px 0 8px 0;font-size:40px;font-weight:900;color:#fff;">建築大師v2.22</h1>
-      <p style="margin:0 0 10px 0;color:rgba(255,255,255,0.9);">輸入玩家ID，限6個中文字</p>
-      <input id="player-id-input" maxlength="6"
+      <p style="margin:0 0 10px 0;color:rgba(255,255,255,0.9);">輸入玩家ID，中文字限7個</p>
+      <input id="player-id-input" maxlength="14"
         style="width:100%;box-sizing:border-box;border-radius:14px;padding:12px 14px;border:1px solid rgba(255,255,255,0.25);background:rgba(0,0,0,0.25);color:#fff;font-size:18px;font-weight:900;outline:none;"
-        placeholder="例如：中和鄭先生" />
+        placeholder="例如：花蓮鄭先生/AdolfisGood" />
 
       <div id="login-err" style="margin-top:8px;color:#ffb3c1;font-weight:900;min-height:22px;"></div>
 
@@ -602,15 +602,40 @@ const bdVal1 = document.getElementById('bd-val-1');
 const bdVal2 = document.getElementById('bd-val-2');
 const bdVal3 = document.getElementById('bd-val-3');
 
-function isCjkHan(str){
-  return /^[\u4E00-\u9FFF]+$/.test(str);
+function displayUnits(str){
+  let units = 0;
+  for (const ch of str) {
+    const cp = ch.codePointAt(0);
+
+    const isCJK =
+      (cp >= 0x4E00 && cp <= 0x9FFF) ||  // 中日韓統一表意文字
+      (cp >= 0x3400 && cp <= 0x4DBF) ||  // 擴展A
+      (cp >= 0xF900 && cp <= 0xFAFF);    // 相容表意文字
+
+    const isASCII = cp <= 0x7F;          // 英數半形
+
+    units += isASCII ? 1 : (isCJK ? 2 : 2);
+  }
+  return units;
 }
+
+const MAX_CJK_CHARS = 7;        // 中文最多 7 個字
+const MAX_UNITS = MAX_CJK_CHARS * 2; // 14 units
 
 function validatePlayerId(raw){
   const s = (raw || "").trim();
+
   if(!s) return { ok:false, msg:"請輸入ID" };
-  if(s.length > 6) return { ok:false, msg:"最多 6 個字" };
-  if(!isCjkHan(s)) return { ok:false, msg:"只能輸入中文字" };
+
+
+  if(/\s/.test(s)) return { ok:false, msg:"ID不可包含空白" };
+
+
+  const u = displayUnits(s);
+  if(u > MAX_UNITS){
+    return { ok:false, msg:`ID太長：中文最多${MAX_CJK_CHARS}字（約等於英文${MAX_UNITS}字元）` };
+  }
+
   return { ok:true, id:s };
 }
 
