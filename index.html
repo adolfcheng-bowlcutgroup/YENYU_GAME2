@@ -293,10 +293,11 @@
     .lb-sub{ font-size: 12px; opacity: 0.75; margin-bottom: 8px; }
 
     .lb-scroll{
-      max-height: none;     
-      overflow: visible;   
-      -webkit-overflow-scrolling: auto;
-      touch-action: auto;
+      max-height: 46vh;         
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-y;
     }
 
     .lb-row{
@@ -661,6 +662,7 @@ let roundIndex = 1;
 let roundTime = ROUND_TIMES[0];
 
 let runId = "";
+let loginInProgress = false;
 let playerId = "-";
 let tsStart = 0;
 let tsEnd = 0;
@@ -1107,7 +1109,7 @@ const CRANE = {
 
 let currentCraneBlock = null;
 let lastSpawnAt = 0;
-const RESIZE_RESPAWN_GRACE_MS = 350; // 剛生成後 350ms 內，不要因 resize 判 out-of-view 就重生
+const RESIZE_RESPAWN_GRACE_MS = 1500; // 剛生成後 350ms 內，不要因 resize 判 out-of-view 就重生
 let fallingBlock = null;
 let pendingCommit = null;
 
@@ -1321,7 +1323,12 @@ function showOverlaySummaryBase({ titleText, subText, buttonText, showLB, isLast
 }
 
 function spawnBlock(){
+function spawnBlock(){
   console.log("[spawnBlock called]", { state, inputLock, spawnQueued, hasCrane: !!currentCraneBlock, stack: new Error().stack });
+
+  // ✅ 最重要：已經有 crane 就不要再生（這一條會直接終結你的「連續spawn」）
+  if(currentCraneBlock) return;
+
   if(login?.classList.contains('show')) return;
   if(overlay?.classList.contains('show')) return;
   if(state!=="running") return;
@@ -1716,6 +1723,13 @@ try{
   console.warn("[leaderboard] submit or fetch failed:", e);
   top20 = loadLB();
 }
+
+
+addToLB(mine);
+
+
+if(!top20?.length) top20 = loadLB();
+
 renderLB(mergeEnsureMine(top20, mine), runId);
   const lbSub = document.getElementById('lb-sub');
   if(lbSub){
@@ -2259,10 +2273,14 @@ function hideOverlay(){
 }
 
 function onLogin(){
+  if(loginInProgress) return;          
+  loginInProgress = true;
+
   console.log("onLogin fired");
   const v = validatePlayerId(idInput?.value);
   if(!v.ok){
     if(loginErr) loginErr.textContent = v.msg;
+    loginInProgress = false;           
     return;
   }
   if(loginErr) loginErr.textContent = "";
@@ -2270,25 +2288,28 @@ function onLogin(){
   playerId = v.id;
   localStorage.setItem("player_id", playerId);
 
+  if(btnLogin) btnLogin.disabled = true;
+
   hideLogin();
 
   runId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
   tsStart = Date.now();
 
-  requestAnimationFrame(()=>{
-    requestAnimationFrame(()=>{
-      resizeRender();  
-      resetWorldForNewRound();   
-      initCamera();      
-      startRound(1);
-      spawnBlock();
-    });
-  });
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    resizeRender();
+    resetWorldForNewRound();
+    initCamera();
+    startRound(1);
+    spawnBlock();
+
+    loginInProgress = false;
+    if(btnLogin) btnLogin.disabled = false;
+  }));
 }
 
 btnLogin?.addEventListener('click', onLogin);
 idInput?.addEventListener('keydown', (e)=>{
-  if(e.key === "Enter") onLogin();
+  if(e.key === "Enter" && !e.repeat) onLogin();
 });
 
 function onPrimaryButton(e){
@@ -2395,6 +2416,8 @@ function resizeRender(){
 
 if(state === "running" && currentCraneBlock && !fallingBlock && !pendingCommit){
 
+  if(level === 0) return;
+
   applyCamera();
 
   const now = performance.now();
@@ -2406,7 +2429,7 @@ if(state === "running" && currentCraneBlock && !fallingBlock && !pendingCommit){
   const camBottom = render.bounds.max.y;
 
   const y = currentCraneBlock.position.y;
-  const out = (y < camTop - 600) || (y > camBottom + 600); // padding 放寬一點更穩
+  const out = (y < camTop - 600) || (y > camBottom + 600);
 
   if(out){
     console.log("[resizeRender] crane out-of-view -> respawn", { camTop, camBottom, y, viewH });
@@ -2529,7 +2552,7 @@ try{
   if(saved && idInput) idInput.value = saved;
 }catch(e){}
 showLogin();
-
+}
 </script>
 </body>
 </html>
