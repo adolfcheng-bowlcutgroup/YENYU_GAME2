@@ -140,6 +140,7 @@
       background: rgba(0,0,0,0.62);
       backdrop-filter: blur(2px);
     }
+
     #overlay .panel{
       position:relative;
       width:min(560px, 92vw);
@@ -149,9 +150,15 @@
       background: rgba(0,0,0,0.30);
       box-shadow: 0 16px 50px rgba(0,0,0,0.35);
       color:white;
+
       max-height: 86vh;
-      overflow: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+
+      touch-action: pan-y;
+      overscroll-behavior: contain;
     }
+
     #overlay h1{
       margin: 2px 0 8px 0;
       font-size: 40px;
@@ -284,13 +291,14 @@
     }
     .lb-title{ font-weight: 900; letter-spacing: 0.6px; margin-bottom: 2px; }
     .lb-sub{ font-size: 12px; opacity: 0.75; margin-bottom: 8px; }
+
     .lb-scroll{
-      overscroll-behavior: contain;
-      max-height: 260px;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-      padding-right: 6px;
+      max-height: none;     
+      overflow: visible;   
+      -webkit-overflow-scrolling: auto;
+      touch-action: auto;
     }
+
     .lb-row{
       display:grid;
       grid-template-columns: 42px 1fr 140px;
@@ -406,11 +414,11 @@
   <div id="login" class="show" aria-hidden="false">
     <div class="backdrop"></div>
     <div class="panel" role="dialog" aria-modal="true">
-      <h1 style="margin:2px 0 8px 0;font-size:40px;font-weight:900;color:#fff;">建築大師v2.22</h1>
-      <p style="margin:0 0 10px 0;color:rgba(255,255,255,0.9);">輸入玩家ID，中文字限7個</p>
+      <h1 style="margin:2px 0 8px 0;font-size:40px;font-weight:900;color:#fff;">建築大師v2.21</h1>
+      <p style="margin:0 0 10px 0;color:rgba(255,255,255,0.9);">輸入玩家ID（中文字限7個）</p>
       <input id="player-id-input" maxlength="14"
         style="width:100%;box-sizing:border-box;border-radius:14px;padding:12px 14px;border:1px solid rgba(255,255,255,0.25);background:rgba(0,0,0,0.25);color:#fff;font-size:18px;font-weight:900;outline:none;"
-        placeholder="例如：花蓮鄭先生/AdolfisGood" />
+        placeholder="例如：花蓮鄭先生" />
 
       <div id="login-err" style="margin-top:8px;color:#ffb3c1;font-weight:900;min-height:22px;"></div>
 
@@ -465,7 +473,7 @@
         </div>
 
         <div class="leaderboard" id="lb-wrap" style="display:none;">
-          <div class="lb-title">排行榜</div>
+          <div class="lb-title">TOP20 排行榜</div>
           <div class="lb-sub" id="lb-sub">排序：總分（同分先完成者優先）</div>
           <div class="lb-scroll" id="lb-scroll" role="region" aria-label="leaderboard">
             <div class="lb-row lb-head"><div>#</div><div>玩家ID</div><div>總分</div></div>
@@ -1718,7 +1726,7 @@ setTimeout(async ()=>{
   const lbSub = document.getElementById('lb-sub');
   if(lbSub){
     lbSub.textContent = top20?.length
-      ? "排行榜（若讀取失敗則顯示本機榜）"
+      ? "同分，則比較早獲得該分數的優先"
       : `本機歷史最高分：${localBest}`;
   }
 }
@@ -2297,7 +2305,7 @@ function onPrimaryButton(e){
 }
 
 btnRetry.addEventListener('click', onPrimaryButton);
-btnRetry.addEventListener('touchstart', (e)=>{ e.preventDefault(); onPrimaryButton(e); }, { passive:false });
+
 
 function shouldIgnoreGlobalInput(e){
   if(login?.classList.contains('show')) return true;
@@ -2315,8 +2323,8 @@ viewport.addEventListener('mousedown', (e)=>{
 });
 
 viewport.addEventListener('touchstart', (e)=>{
-  if(shouldIgnoreGlobalInput(e)) return;
-  e.preventDefault();
+  if (shouldIgnoreGlobalInput(e)) return;
+  if (e.cancelable) e.preventDefault();
   drop();
 }, { passive:false });
 
