@@ -415,7 +415,7 @@
   <div id="login" class="show" aria-hidden="false">
     <div class="backdrop"></div>
     <div class="panel" role="dialog" aria-modal="true">
-      <h1 style="margin:2px 0 8px 0;font-size:40px;font-weight:900;color:#fff;">建築大師v2156</h1>
+      <h1 style="margin:2px 0 8px 0;font-size:40px;font-weight:900;color:#fff;">建築大師v2206</h1>
       <p style="margin:0 0 10px 0;color:rgba(255,255,255,0.9);">輸入玩家ID（中文字限7個）</p>
       <input id="player-id-input" maxlength="14"
         style="width:100%;box-sizing:border-box;border-radius:14px;padding:12px 14px;border:1px solid rgba(255,255,255,0.25);background:rgba(0,0,0,0.25);color:#fff;font-size:18px;font-weight:900;outline:none;"
@@ -1322,25 +1322,27 @@ function showOverlaySummaryBase({ titleText, subText, buttonText, showLB, isLast
 
 }
 
+let spawnLockUntil = 0;
+
 function spawnBlock(){
+  const now = performance.now();
+
+  if(now < spawnLockUntil) return;
+  spawnLockUntil = now + 200;
+
   console.log("[spawnBlock called]", { state, inputLock, spawnQueued, hasCrane: !!currentCraneBlock, stack: new Error().stack });
 
-  // ✅ 最重要：已經有 crane 就不要再生（這一條會直接終結你的「連續spawn」）
   if(currentCraneBlock) return;
-
   if(login?.classList.contains('show')) return;
   if(overlay?.classList.contains('show')) return;
-  if(state!=="running") return;
+  if(state !== "running") return;
   if(spawnQueued) return;
   if(inputLock) return;
 
   measureUiBottom();
-
   const nextLvl = level + 1;
   const { w, h } = sizeForLevel(nextLvl);
-
   const towerTopY = getTowerTopWorldY();
-
   const gapByLevel = CRANE.gapMax - Math.min(40, level * 1.2);
   const GAP_ABOVE_TOWER = Math.max(CRANE.gapMin, gapByLevel);
 
@@ -2272,14 +2274,16 @@ function hideOverlay(){
 }
 
 function onLogin(){
-  if(loginInProgress) return;          
+  if(loginInProgress) return;
   loginInProgress = true;
+  btnLogin.disabled = true;
 
   console.log("onLogin fired");
   const v = validatePlayerId(idInput?.value);
   if(!v.ok){
     if(loginErr) loginErr.textContent = v.msg;
-    loginInProgress = false;           
+    loginInProgress = false; 
+    btnLogin.disabled = false;          
     return;
   }
   if(loginErr) loginErr.textContent = "";
@@ -2301,8 +2305,9 @@ function onLogin(){
     startRound(1);
     spawnBlock();
 
+
     loginInProgress = false;
-    if(btnLogin) btnLogin.disabled = false;
+    btnLogin.disabled = false;
   }));
 }
 
@@ -2414,34 +2419,28 @@ function resizeRender(){
 
 
 if(state === "running" && currentCraneBlock && !fallingBlock && !pendingCommit){
+  if(level !== 0){
+    applyCamera();
 
-  if(level === 0) return;
+    const now = performance.now();
+    if(now - lastSpawnAt >= RESIZE_RESPAWN_GRACE_MS){
+      const camTop = render.bounds.min.y;
+      const camBottom = render.bounds.max.y;
 
-  applyCamera();
+      const y = currentCraneBlock.position.y;
+      const out = (y < camTop - 600) || (y > camBottom + 600);
 
-  const now = performance.now();
-  if(now - lastSpawnAt < RESIZE_RESPAWN_GRACE_MS){
-    return;
-  }
+      if(out){
+        console.log("[resizeRender] crane out-of-view -> respawn", { camTop, camBottom, y, viewH });
+        try{ World.remove(world, currentCraneBlock); }catch(e){}
+        currentCraneBlock = null;
 
-  const camTop = render.bounds.min.y;
-  const camBottom = render.bounds.max.y;
+        inputLock = false;
+        spawnQueued = false;
 
-  const y = currentCraneBlock.position.y;
-  const out = (y < camTop - 600) || (y > camBottom + 600);
-
-  if(out){
-    console.log("[resizeRender] crane out-of-view -> respawn", { camTop, camBottom, y, viewH });
-
-    try{ World.remove(world, currentCraneBlock); }catch(e){}
-    currentCraneBlock = null;
-
-    inputLock = false;
-    spawnQueued = false;
-
-    setTimeout(()=>{
-      if(state==="running" && !currentCraneBlock) spawnBlock();
-    }, 0);
+        setTimeout(()=>{ if(state==="running" && !currentCraneBlock) spawnBlock(); }, 0);
+      }
+    }
   }
 }
 
