@@ -1686,15 +1686,6 @@ async function showRoundSummaryUI({ mode, reason, roundScore }){
   tsEnd = Date.now();
   const localBest = updateLocalBest(total);
 
-  
-  await runSummaryCountUp({
-    isLast: true,
-    roundScore: 0,
-    totalScore: total,
-    showCumulativeAfterRound2: false
-  });
-
- 
 const mine = { playerId, total, tsEnd, runId };
 
 await runSummaryCountUp({
@@ -1706,26 +1697,13 @@ await runSummaryCountUp({
 
 let top20 = [];
 try{
+  await submitScoreToFirestore(mine);
   top20 = await fetchTopScores();
 }catch(e){
-  console.warn("[leaderboard] fetchTopScores failed:", e);
-
-  // 降級：至少不要顯示成「空榜」，改成顯示本機 Top
-  top20 = loadLB(); // 你已經有 localStorage 的 LB
+  console.warn("[leaderboard] submit or fetch failed:", e);
+  top20 = loadLB();
 }
-
 renderLB(mergeEnsureMine(top20, mine), runId);
-
-submitScoreToFirestore(mine).catch(()=>{});
-
-setTimeout(async ()=>{
-  try{
-    const fresh = await fetchTopScores();
-    renderLB(mergeEnsureMine(fresh, mine), runId);
-  }catch(e){
-  }
-}, 700);
-
   const lbSub = document.getElementById('lb-sub');
   if(lbSub){
     lbSub.textContent = top20?.length
